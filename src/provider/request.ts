@@ -8,7 +8,9 @@ import type { DeepSeekMessage, DeepSeekRequest } from '../types';
 import { pruneReasoningCache, type ReasoningEntry } from './cache';
 import { convertMessages, convertTools, countMessageChars } from './convert';
 import type { CacheDiagnosticsRecorder, CacheDiagnosticsRun } from './diagnostics';
+import { dumpDeepSeekRequest } from './dump';
 import { getConfiguredThinkingEffort, type ModelConfigurationOptions } from './models';
+import type { ConversationSegment } from './segment';
 import { resolveImageMessages } from './vision/index';
 
 export interface PreparedChatRequest {
@@ -18,11 +20,14 @@ export interface PreparedChatRequest {
 	totalRequestChars: number;
 	trailingToolResultIds: string[];
 	cacheDiagnostics: CacheDiagnosticsRun;
+	segment: ConversationSegment;
 }
 
 export interface PrepareChatRequestOptions {
 	authManager: AuthManager;
+	globalStorageUri: vscode.Uri;
 	modelInfo: vscode.LanguageModelChatInformation;
+	segment: ConversationSegment;
 	messages: readonly vscode.LanguageModelChatRequestMessage[];
 	options: vscode.ProvideLanguageModelChatResponseOptions;
 	token: vscode.CancellationToken;
@@ -33,7 +38,9 @@ export interface PrepareChatRequestOptions {
 
 export async function prepareChatRequest({
 	authManager,
+	globalStorageUri,
 	modelInfo,
+	segment,
 	messages,
 	options,
 	token,
@@ -77,8 +84,23 @@ export async function prepareChatRequest({
 				}
 			: {}),
 	};
+	dumpDeepSeekRequest(request, {
+		globalStorageUri,
+		segment,
+		vscodeModelId: modelInfo.id,
+		isThinkingModel,
+		thinkingEffort,
+		maxTokens,
+		inputMessages: messages,
+		resolvedMessages,
+		requestOptions: options,
+		visionModelId: visionResolution.visionModelId,
+		visionCacheStats: visionResolution.stats,
+	});
+
 	const diagnosticsRun = cacheDiagnostics.beginRequest({
 		request,
+		segment,
 		vscodeModelId: modelInfo.id,
 		isThinkingModel,
 		thinkingEffort,
@@ -97,6 +119,7 @@ export async function prepareChatRequest({
 		totalRequestChars,
 		trailingToolResultIds: collectTrailingToolResultIds(deepseekMessages),
 		cacheDiagnostics: diagnosticsRun,
+		segment,
 	};
 }
 
