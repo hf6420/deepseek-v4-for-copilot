@@ -34,12 +34,6 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 	private readonly vision: ReturnType<typeof createVisionService>;
 	private readonly balanceCurrencyResolver: BalanceCurrencyResolver;
 
-	/**
-	 * Adaptive chars-per-token ratio, calibrated from actual usage data.
-	 * Updated via exponential moving average each time the API reports real token counts.
-	 */
-	private charsPerToken = 4.0;
-
 	constructor(context: vscode.ExtensionContext) {
 		this.authManager = new AuthManager(context);
 		this.globalStorageUri = context.globalStorageUri;
@@ -184,6 +178,8 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			getVisionDescriber: () => this.vision.get(),
 		});
 
+		// Per-request closure avoids cross-request token calibration drift.
+		const charsPerToken = { value: 4.0 };
 		return streamChatCompletion({
 			prepared,
 			progress,
@@ -192,9 +188,9 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 				toolFlow.initialResponseNotice,
 				prepared.initialResponseNotice,
 			),
-			getCharsPerToken: () => this.charsPerToken,
-			setCharsPerToken: (charsPerToken) => {
-				this.charsPerToken = charsPerToken;
+			getCharsPerToken: () => charsPerToken.value,
+			setCharsPerToken: (value) => {
+				charsPerToken.value = value;
 			},
 		});
 	}
@@ -204,7 +200,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		text: string | vscode.LanguageModelChatRequestMessage,
 		_token: vscode.CancellationToken,
 	): Promise<number> {
-		return estimateTokenCount(text, this.charsPerToken);
+		return estimateTokenCount(text, 4.0);
 	}
 }
 

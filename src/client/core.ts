@@ -2,11 +2,11 @@ import type { CancellationToken } from 'vscode';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type {
-	DeepSeekRequest,
-	DeepSeekStreamChunk,
-	DeepSeekToolCall,
-	DeepSeekUsage,
-	StreamCallbacks,
+    DeepSeekRequest,
+    DeepSeekStreamChunk,
+    DeepSeekToolCall,
+    DeepSeekUsage,
+    StreamCallbacks,
 } from '../types';
 import { createHttpError, formatRequestError, normalizeRequestError } from './error';
 
@@ -36,6 +36,9 @@ export class DeepSeekClient {
 		if (cancellationToken?.isCancellationRequested) {
 			controller.abort();
 		}
+
+		const REQUEST_TIMEOUT_MS = 120_000;
+		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
 		try {
 			// Request usage stats in streaming responses so we can calibrate token counting.
@@ -165,6 +168,12 @@ export class DeepSeekClient {
 							pendingToolCalls.clear();
 						}
 					} catch (e) {
+						// Flush pending tool calls so a parse failure on the chunk carrying
+						// finish_reason does not leave tool calls silently dropped.
+						for (const tc of pendingToolCalls.values()) {
+							callbacks.onToolCall(tc);
+						}
+						pendingToolCalls.clear();
 						logger.error('Failed to parse SSE chunk:', jsonStr.slice(0, 200), e);
 					}
 				}
@@ -180,6 +189,7 @@ export class DeepSeekClient {
 			logger.error('DeepSeek request failed:', formatRequestError(normalizedError));
 			callbacks.onError(normalizedError);
 		} finally {
+			clearTimeout(timeout);
 			cancelListener?.dispose();
 		}
 	}

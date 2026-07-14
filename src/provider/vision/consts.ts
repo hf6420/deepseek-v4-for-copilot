@@ -20,7 +20,13 @@ export const IMAGE_DESCRIPTION_PROMPT =
  * fails to describe an image. Keep this in English and out of i18n so prompt
  * shape and marker replay text do not vary by VS Code display language.
  */
-export const IMAGE_DESCRIPTION_UNAVAILABLE = '[Image Description unavailable]';
+// Instruct the model NOT to hallucinate image content when the vision proxy is unavailable.
+// This marker replaces image attachments in the prompt. The model must be told explicitly
+// that visual data is absent — otherwise it may fabricate plausible but false descriptions.
+export const IMAGE_DESCRIPTION_UNAVAILABLE =
+	'[Image not available — no vision proxy is configured. ' +
+	'DO NOT describe or speculate about the image content. ' +
+	'Tell the user that the image was not analyzed and suggest configuring a vision model.]';
 
 /**
  * Wrapper applied to vision model descriptions before they are inserted into

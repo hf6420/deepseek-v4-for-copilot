@@ -31,6 +31,10 @@ const GIT_COMMIT_MESSAGE_PREFIX =
 const RENAME_SUGGESTIONS_PREFIX = 'You are a distinguished software engineer';
 const MAIN_AGENT_PREFIX = 'You are an expert AI programming assistant';
 const TERMINAL_NOTIFICATION_PATTERN = /^\[Terminal\s+\S+\s+notification:/;
+// Kinds where thinking is forced off to save costs.
+// 'background' and 'unknown' are included as a safety net: when Copilot's internal
+// prompt prefixes change and classification falls through to these catch-all kinds,
+// disabling thinking is the safer default (fail cheap, not expensive).
 const REQUEST_KINDS_WITH_FORCED_NONE_THINKING = new Set<RequestKind>([
 	'todo-tracker',
 	'prompt-categorizer',
@@ -40,6 +44,8 @@ const REQUEST_KINDS_WITH_FORCED_NONE_THINKING = new Set<RequestKind>([
 	'git-branch-name',
 	'git-commit-message',
 	'rename-suggestions',
+	'background',
+	'unknown',
 ]);
 
 export function formatModelFields(vscodeModelId: string, apiModelId?: string): string {
