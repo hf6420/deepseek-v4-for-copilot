@@ -3,6 +3,15 @@ import { CONFIG_SECTION } from './consts';
 
 export type DebugMode = 'minimal' | 'metadata' | 'verbose';
 
+// ---- Cached debug mode ----
+
+let cachedDebugMode: DebugMode | undefined;
+
+/** Invalidate the cached debug mode so the next read re-evaluates configuration. */
+export function invalidateDebugModeCache(): void {
+	cachedDebugMode = undefined;
+}
+
 /**
  * Get DeepSeek API base URL from settings.
  * Falls back to the official endpoint when not configured.
@@ -43,11 +52,20 @@ export function getMaxTokens(): number | undefined {
  * settings keep working even if migration cannot update every scope.
  */
 export function getDebugMode(): DebugMode {
+	if (cachedDebugMode) {
+		return cachedDebugMode;
+	}
+
 	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
 	const mode = getConfiguredDebugMode(config);
-	if (mode) return mode;
+	if (mode) {
+		cachedDebugMode = mode;
+		return mode;
+	}
 
-	return config.get<boolean>('debug', false) ? 'metadata' : 'minimal';
+	const fallback = config.get<boolean>('debug', false) ? 'metadata' : 'minimal';
+	cachedDebugMode = fallback;
+	return fallback;
 }
 
 /**

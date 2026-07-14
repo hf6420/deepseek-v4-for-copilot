@@ -49,9 +49,7 @@ export interface DeepSeekRequest {
 	tool_choice?: 'none' | 'auto' | 'required';
 	thinking?: { type: 'enabled' | 'disabled' };
 	reasoning_effort?: 'high' | 'max';
-	stream_options?: {
-		include_usage: boolean;
-	};
+
 }
 
 export interface DeepSeekStreamChunk {

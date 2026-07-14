@@ -94,39 +94,33 @@ function classifyRequest(input: {
 }): RequestKind {
 	const firstText = input.firstText.trimStart();
 	const latestUserText = input.latestUserText.trimStart();
+
 	if (TERMINAL_NOTIFICATION_PATTERN.test(latestUserText)) {
 		return 'terminal-steering';
 	}
-	if (
-		isOnlyTool(input.toolNames, 'manage_todo_list') ||
-		firstText.startsWith(TODO_TRACKER_PREFIX)
-	) {
-		return 'todo-tracker';
+
+	// Table-driven prefix classification: ordered from most to least specific.
+	const PREFIX_CLASSIFIERS: ReadonlyArray<readonly [string | readonly string[], RequestKind]> = [
+		[TODO_TRACKER_PREFIX, 'todo-tracker'],
+		[PROMPT_CATEGORIZER_PREFIX, 'prompt-categorizer'],
+		[SETTINGS_RESOLVER_PREFIX, 'settings-resolver'],
+		[CHAT_TITLE_PREFIXES, 'chat-title'],
+		[INLINE_PROGRESS_MESSAGE_PREFIX, 'inline-progress-message'],
+		[GIT_BRANCH_NAME_PREFIX, 'git-branch-name'],
+		[GIT_COMMIT_MESSAGE_PREFIX, 'git-commit-message'],
+		[RENAME_SUGGESTIONS_PREFIX, 'rename-suggestions'],
+	] as const;
+
+	for (const [prefix, kind] of PREFIX_CLASSIFIERS) {
+		if (typeof prefix === 'string') {
+			if (firstText.startsWith(prefix)) {
+				return kind;
+			}
+		} else if (startsWithAny(firstText, prefix)) {
+			return kind;
+		}
 	}
-	if (
-		isOnlyTool(input.toolNames, 'categorize_prompt') ||
-		firstText.startsWith(PROMPT_CATEGORIZER_PREFIX)
-	) {
-		return 'prompt-categorizer';
-	}
-	if (firstText.startsWith(SETTINGS_RESOLVER_PREFIX)) {
-		return 'settings-resolver';
-	}
-	if (startsWithAny(firstText, CHAT_TITLE_PREFIXES)) {
-		return 'chat-title';
-	}
-	if (firstText.startsWith(INLINE_PROGRESS_MESSAGE_PREFIX)) {
-		return 'inline-progress-message';
-	}
-	if (firstText.startsWith(GIT_BRANCH_NAME_PREFIX)) {
-		return 'git-branch-name';
-	}
-	if (firstText.startsWith(GIT_COMMIT_MESSAGE_PREFIX)) {
-		return 'git-commit-message';
-	}
-	if (firstText.startsWith(RENAME_SUGGESTIONS_PREFIX)) {
-		return 'rename-suggestions';
-	}
+
 	if (
 		firstText.startsWith(MAIN_AGENT_PREFIX) ||
 		firstText.includes('<skills>') ||
@@ -134,6 +128,15 @@ function classifyRequest(input: {
 	) {
 		return 'main-agent';
 	}
+
+	// Tool-only classification: single-tool requests without matching prefixes.
+	if (isOnlyTool(input.toolNames, 'manage_todo_list')) {
+		return 'todo-tracker';
+	}
+	if (isOnlyTool(input.toolNames, 'categorize_prompt')) {
+		return 'prompt-categorizer';
+	}
+
 	if (input.toolNames.length > 0 || firstText.length > 0) {
 		return 'background';
 	}

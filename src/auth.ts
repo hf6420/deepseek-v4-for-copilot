@@ -8,26 +8,48 @@ import { t } from './i18n';
  */
 export class AuthManager {
 	private readonly secretStorage: vscode.SecretStorage;
+	private cachedApiKey: string | undefined;
+	private apiKeyCacheValid = false;
 
 	constructor(context: vscode.ExtensionContext) {
 		this.secretStorage = context.secrets;
+		// Invalidate cache when secrets change in another window.
+		context.subscriptions.push(
+			context.secrets.onDidChange((e) => {
+				if (e.key === API_KEY_SECRET) {
+					this.invalidateApiKeyCache();
+				}
+			}),
+		);
 	}
 
 	/**
 	 * Get API key. Tries SecretStorage first, then falls back to settings.
+	 * Results are cached per session; call invalidateApiKeyCache() to force refresh.
 	 */
 	async getApiKey(): Promise<string | undefined> {
+		if (this.apiKeyCacheValid) {
+			return this.cachedApiKey;
+		}
+
 		const secretKey = await this.secretStorage.get(API_KEY_SECRET);
 		if (secretKey) {
+			this.cachedApiKey = secretKey;
+			this.apiKeyCacheValid = true;
 			return secretKey;
 		}
 
 		const config = vscode.workspace.getConfiguration('deepseek-copilot');
 		const settingsKey = config.get<string>('apiKey');
 		if (settingsKey?.trim()) {
-			return settingsKey.trim();
+			const key = settingsKey.trim();
+			this.cachedApiKey = key;
+			this.apiKeyCacheValid = true;
+			return key;
 		}
 
+		this.cachedApiKey = undefined;
+		this.apiKeyCacheValid = true;
 		return undefined;
 	}
 
@@ -35,7 +57,10 @@ export class AuthManager {
 	 * Store API key in SecretStorage.
 	 */
 	async setApiKey(apiKey: string): Promise<void> {
-		await this.secretStorage.store(API_KEY_SECRET, apiKey.trim());
+		const trimmed = apiKey.trim();
+		await this.secretStorage.store(API_KEY_SECRET, trimmed);
+		this.cachedApiKey = trimmed;
+		this.apiKeyCacheValid = true;
 	}
 
 	/**
@@ -43,6 +68,15 @@ export class AuthManager {
 	 */
 	async deleteApiKey(): Promise<void> {
 		await this.secretStorage.delete(API_KEY_SECRET);
+		this.invalidateApiKeyCache();
+	}
+
+	/**
+	 * Invalidate the cached API key so the next read re-fetches from storage.
+	 */
+	invalidateApiKeyCache(): void {
+		this.cachedApiKey = undefined;
+		this.apiKeyCacheValid = false;
 	}
 
 	/**

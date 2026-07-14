@@ -1,7 +1,7 @@
 import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { getStabilizeToolListEnabled } from '../config';
-import { MODELS } from '../consts';
+import { DEFAULT_CHARS_PER_TOKEN, MODELS } from '../consts';
 import { t } from '../i18n';
 import { logger } from '../logger';
 import { createCacheDiagnosticsRecorder, dumpProviderInput } from './debug';
@@ -179,7 +179,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		});
 
 		// Per-request closure avoids cross-request token calibration drift.
-		const charsPerToken = { value: 4.0 };
+		const charsPerToken = { value: DEFAULT_CHARS_PER_TOKEN };
 		return streamChatCompletion({
 			prepared,
 			progress,
@@ -200,7 +200,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		text: string | vscode.LanguageModelChatRequestMessage,
 		_token: vscode.CancellationToken,
 	): Promise<number> {
-		return estimateTokenCount(text, 4.0);
+		return estimateTokenCount(text, DEFAULT_CHARS_PER_TOKEN);
 	}
 }
 

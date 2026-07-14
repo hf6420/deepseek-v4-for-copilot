@@ -70,7 +70,7 @@ export function convertMessages(
 		} else {
 			if (content) {
 				result.push({
-					role: role as 'user' | 'assistant',
+					role: role,
 					content: content,
 				});
 			}
@@ -110,14 +110,14 @@ function normalizeThinkingPartText(value: string | string[]): string {
 	return Array.isArray(value) ? value.join('') : value;
 }
 
-function mapRole(role: vscode.LanguageModelChatMessageRole): 'user' | 'assistant' {
+function mapRole(role: vscode.LanguageModelChatMessageRole): 'system' | 'user' | 'assistant' {
 	switch (role) {
 		case vscode.LanguageModelChatMessageRole.User:
 			return 'user';
 		case vscode.LanguageModelChatMessageRole.Assistant:
 			return 'assistant';
 		default:
-			return 'user';
+			return 'system';
 	}
 }
 

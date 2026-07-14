@@ -7,7 +7,8 @@ import type { ModelDefinition } from './types';
  * These do NOT depend on the VS Code runtime (no workspace configuration,
  * no secrets API). For run-time settings reads see `config.ts`.
  */
-
+/** Default characters-per-token ratio used for token counting calibration. */
+export const DEFAULT_CHARS_PER_TOKEN = 4.0;
 /** VS Code configuration section prefix for all extension settings. */
 export const CONFIG_SECTION = 'deepseek-copilot';
 

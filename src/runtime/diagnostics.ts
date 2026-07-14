@@ -1,5 +1,5 @@
 import vscode from 'vscode';
-import { getDebugMode, migrateLegacyDebugSetting } from '../config';
+import { getDebugMode, invalidateDebugModeCache, migrateLegacyDebugSetting } from '../config';
 import { CONFIG_SECTION } from '../consts';
 import { logger } from '../logger';
 
@@ -24,10 +24,13 @@ export async function initializeDiagnostics(context: vscode.ExtensionContext): P
 	let currentDebugMode = getDebugMode();
 	context.subscriptions.push(
 		vscode.workspace.onDidChangeConfiguration((e) => {
-			if (e.affectsConfiguration(`${CONFIG_SECTION}.debugMode`)) {
+			if (e.affectsConfiguration(`${CONFIG_SECTION}.debugMode`) || e.affectsConfiguration(`${CONFIG_SECTION}.debug`)) {
 				const previous = currentDebugMode;
+				invalidateDebugModeCache();
 				currentDebugMode = getDebugMode();
-				logger.info(`debugMode changed: ${previous} -> ${currentDebugMode}`);
+				if (currentDebugMode !== previous) {
+					logger.info(`debugMode changed: ${previous} -> ${currentDebugMode}`);
+				}
 			}
 		}),
 	);

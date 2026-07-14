@@ -81,6 +81,11 @@ export class DeepSeekClient {
 
 				const { done, value } = await reader.read();
 				if (done) {
+					// Flush any remaining tool calls before the stream ends without [DONE].
+					for (const tc of pendingToolCalls.values()) {
+						callbacks.onToolCall(tc);
+					}
+					pendingToolCalls.clear();
 					break;
 				}
 
