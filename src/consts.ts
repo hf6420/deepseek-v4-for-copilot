@@ -54,8 +54,8 @@ export const MODELS: ModelDefinition[] = [
 		name: 'DeepSeek V4 Flash',
 		family: 'deepseek',
 		version: 'v4',
-		detail: 'Fast, general-purpose model',
-		maxInputTokens: 655360,
+		detail: 'Fast, general-purpose model · 1M context',
+		maxInputTokens: 1000000,
 		maxOutputTokens: 393216,
 		capabilities: {
 			toolCalling: DEEPSEEK_TOOLS_LIMIT,
@@ -74,8 +74,8 @@ export const MODELS: ModelDefinition[] = [
 		name: 'DeepSeek V4 Pro',
 		family: 'deepseek',
 		version: 'v4',
-		detail: 'Most capable reasoning model',
-		maxInputTokens: 655360,
+		detail: 'Most capable reasoning model · 1M context',
+		maxInputTokens: 1000000,
 		maxOutputTokens: 393216,
 		capabilities: {
 			toolCalling: DEEPSEEK_TOOLS_LIMIT,
