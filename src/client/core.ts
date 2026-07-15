@@ -2,13 +2,22 @@ import type { CancellationToken } from 'vscode';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type {
-    DeepSeekRequest,
-    DeepSeekStreamChunk,
-    DeepSeekToolCall,
-    DeepSeekUsage,
-    StreamCallbacks,
+	DeepSeekRequest,
+	DeepSeekStreamChunk,
+	DeepSeekToolCall,
+	DeepSeekUsage,
+	StreamCallbacks,
 } from '../types';
-import { createHttpError, formatRequestError, normalizeRequestError } from './error';
+import {
+	createHttpError,
+	DeepSeekRequestError,
+	formatRequestError,
+	normalizeRequestError,
+} from './error';
+
+const REQUEST_TIMEOUT_MS = 120_000;
+const MAX_CONNECT_RETRIES = 2;
+const RETRY_DELAYS_MS = [1000, 2000];
 
 /**
  * Lightweight SSE-streaming DeepSeek API client.
@@ -22,9 +31,62 @@ export class DeepSeekClient {
 
 	/**
 	 * Stream a chat completion from the DeepSeek API.
-	 * Parses SSE chunks and dispatches callbacks for content, thinking, and tool calls.
+	 * Automatically retries on transient connection errors (up to 2 retries
+	 * with 1s / 2s backoff). HTTP errors and cancellations are not retried.
 	 */
 	async streamChatCompletion(
+		request: DeepSeekRequest,
+		callbacks: StreamCallbacks,
+		cancellationToken?: CancellationToken,
+	): Promise<void> {
+		for (let attempt = 0; attempt <= MAX_CONNECT_RETRIES; attempt++) {
+			if (cancellationToken?.isCancellationRequested) {
+				return;
+			}
+
+			if (attempt > 0) {
+				const delay = RETRY_DELAYS_MS[attempt - 1];
+				logger.warn(
+					`Retrying request after connection error (attempt ${attempt + 1}/${MAX_CONNECT_RETRIES + 1}, waiting ${delay}ms)`,
+				);
+				await new Promise((resolve) => setTimeout(resolve, delay));
+			}
+
+			try {
+				await this._performStreamRequest(request, callbacks, cancellationToken);
+				return;
+			} catch (error) {
+				if (cancellationToken?.isCancellationRequested) {
+					return;
+				}
+
+				if (!isRetryableError(error) || attempt >= MAX_CONNECT_RETRIES) {
+					const normalizedError = normalizeRequestError(error, {
+						baseUrl: this.baseUrl,
+						request,
+					});
+					logger.error(
+						'DeepSeek request failed:',
+						formatRequestError(normalizedError),
+					);
+					callbacks.onError(normalizedError);
+					return;
+				}
+
+				// Connection error — will retry on next iteration
+				const brief = error instanceof Error ? error.message : String(error);
+				logger.warn(
+					`Connect error (attempt ${attempt + 1}/${MAX_CONNECT_RETRIES + 1}): ${brief}`,
+				);
+			}
+		}
+	}
+
+	/**
+	 * Execute a single streaming request attempt.
+	 * Throws on failure — retry logic is handled by the caller.
+	 */
+	private async _performStreamRequest(
 		request: DeepSeekRequest,
 		callbacks: StreamCallbacks,
 		cancellationToken?: CancellationToken,
@@ -37,7 +99,6 @@ export class DeepSeekClient {
 			controller.abort();
 		}
 
-		const REQUEST_TIMEOUT_MS = 120_000;
 		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
 		try {
@@ -173,13 +234,17 @@ export class DeepSeekClient {
 							pendingToolCalls.clear();
 						}
 					} catch (e) {
-						// Flush pending tool calls so a parse failure on the chunk carrying
-						// finish_reason does not leave tool calls silently dropped.
+						// JSON parse failure means the stream is corrupted — abort.
+						// Flush any incomplete tool calls so the caller can report them,
+						// then throw so the retry wrapper calls onError.
 						for (const tc of pendingToolCalls.values()) {
 							callbacks.onToolCall(tc);
 						}
 						pendingToolCalls.clear();
-						logger.error('Failed to parse SSE chunk:', jsonStr.slice(0, 200), e);
+						const message = e instanceof Error ? e.message : String(e);
+						throw new Error(
+							`Failed to parse SSE chunk: ${jsonStr.slice(0, 200)} — ${message}`,
+						);
 					}
 				}
 			}
@@ -190,9 +255,8 @@ export class DeepSeekClient {
 			if (isAbortError(error) && cancellationToken?.isCancellationRequested) {
 				return;
 			}
-			const normalizedError = normalizeRequestError(error, { baseUrl: this.baseUrl, request });
-			logger.error('DeepSeek request failed:', formatRequestError(normalizedError));
-			callbacks.onError(normalizedError);
+			// Re-throw to let the retry wrapper decide
+			throw error;
 		} finally {
 			clearTimeout(timeout);
 			cancelListener?.dispose();
@@ -209,4 +273,56 @@ function reportFinalUsage(callbacks: StreamCallbacks, usage: DeepSeekUsage | und
 
 function isAbortError(error: unknown): boolean {
 	return error instanceof Error && error.name === 'AbortError';
+}
+
+/**
+ * Determine whether a fetch error is retryable.
+ * HTTP errors (wrapped in DeepSeekRequestError) and cancellations are NOT retryable.
+ * Only transient network-level errors (connection refused, DNS failure, reset, timeout)
+ * are retryable. Application-level errors (JSON parse, serialization, etc.) are not.
+ */
+function isRetryableError(error: unknown): boolean {
+	if (isAbortError(error)) {
+		return false;
+	}
+	if (error instanceof DeepSeekRequestError) {
+		return false;
+	}
+	// Only retry transient network errors from fetch / Node.js internals.
+	// Non-network TypeErrors (e.g. JSON parse, safeStringify) must not be retried.
+	if (error instanceof TypeError) {
+		return isNetworkError(error);
+	}
+	// Other Error subclasses (SyntaxError, RangeError, etc.) are application bugs.
+	if (error instanceof Error) {
+		return false;
+	}
+	// Unknown thrown primitives — do not retry.
+	return false;
+}
+
+/** Network-related error codes / messages that indicate a transient failure. */
+const RETRYABLE_NETWORK_PATTERNS = [
+	'fetch failed',
+	'ECONNREFUSED',
+	'ECONNRESET',
+	'ETIMEDOUT',
+	'ENOTFOUND',
+	'EAI_AGAIN',
+	'EPIPE',
+	'ERR_INTERNET_DISCONNECTED',
+	'ERR_PROXY_CONNECTION_FAILED',
+	'ERR_CONNECTION_RESET',
+	'ERR_CONNECTION_REFUSED',
+	'ERR_CONNECTION_TIMED_OUT',
+	'UND_ERR_CONNECT_TIMEOUT',
+	'UND_ERR_HEADERS_TIMEOUT',
+	'UND_ERR_SOCKET',
+];
+
+function isNetworkError(error: TypeError): boolean {
+	const message = error.message.toLowerCase();
+	return RETRYABLE_NETWORK_PATTERNS.some((pattern) =>
+		message.includes(pattern.toLowerCase()),
+	);
 }

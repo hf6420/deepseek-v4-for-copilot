@@ -4,14 +4,23 @@ import type { ModelDefinition, PricingCurrency } from '../types';
 import { toModelCostInfo, type ModelCostInformation } from './pricing/costs';
 
 /**
- * NOTE: Non-public API surface.
+ * NOTE: Non-public API surface — stability depends on Copilot Chat internals.
  *
- * The fields below (`configurationSchema` on chat info, cost metadata,
- * `modelConfiguration` on response options, plus `isBYOK` / `isUserSelectable` /
- * `statusIcon`)
- * are not part of the stable `vscode.LanguageModelChat*` typings yet. They are
- * the same shape currently consumed by GitHub Copilot Chat to render model picker
- * metadata and per-model configuration controls.
+ * The fields below are NOT part of the stable `vscode.LanguageModelChat*` typings.
+ * They are reverse-engineered from how GitHub Copilot Chat renders the model picker
+ * and are required for DeepSeek models to appear correctly (BYOK badge, warning icon,
+ * Thinking mode dropdown, pricing display).
+ *
+ * ── Breakage indicators (check these when models disappear from picker) ──
+ * Last verified: Copilot Chat v0.30+ (Jul 2026).
+ * If Copilot Chat stops reading any field below, users will see:
+ *   - isBYOK / isUserSelectable missing     → model not listed
+ *   - statusIcon ignored                    → no warning when API key absent
+ *   - configurationSchema ignored           → Thinking mode dropdown disappears
+ *   - cost / pricingCurrency ignored        → price labels vanish
+ *
+ * When debugging: compare with @github/copilot-chat's model info consumption in
+ * its bundled extension code (look for "isBYOK" / "configurationSchema" usage).
  */
 
 export type ThinkingEffort = 'none' | 'high' | 'max';

@@ -200,6 +200,7 @@
     "format": "oxfmt --write src/",
     "format:check": "oxfmt --check src/",
     "package": "vsce package --readme-path dist/README.marketplace.md -o dist/",
+    "package:win": "node -e \"const fs=require('fs');const pkg=require('./package.json');const orig=pkg.scripts['vscode:prepublish'];pkg.scripts['vscode:prepublish']='npm run compile';fs.writeFileSync('package.json',JSON.stringify(pkg,null,2)+'\\n');try{require('child_process').execSync('vsce package --readme-path dist/README.marketplace.md -o dist/',{stdio:'inherit'})}finally{fs.writeFileSync('package.json',JSON.stringify({...pkg,scripts:{...pkg.scripts,'vscode:prepublish':orig}},null,2)+'\\n')}\"",
     "login": "vsce login Vizards"
   },
   "devDependencies": {
