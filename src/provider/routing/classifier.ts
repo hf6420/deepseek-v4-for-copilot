@@ -44,8 +44,8 @@ const MAIN_AGENT_KEYWORDS = [
 	'<instructions>',       // Copilot agent instruction blocks
 	'<skills>',              // Skill listing in agent prompts
 	'<agents>',              // Sub-agent listing
-	'<toolUseInstructions>', // Tool use instructions block
-	'<memoryInstructions>',  // Memory instructions block
+	'<tooluseinstructions>', // Tool use instructions block
+	'<memoryinstructions>',  // Memory instructions block
 ];
 
 const TODO_TRACKER_KEYWORDS = ['background task tracker', 'track your progress'];
