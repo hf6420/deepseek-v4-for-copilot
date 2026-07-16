@@ -2,22 +2,22 @@ import type { CancellationToken } from 'vscode';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type {
-	DeepSeekRequest,
-	DeepSeekStreamChunk,
-	DeepSeekToolCall,
-	DeepSeekUsage,
-	StreamCallbacks,
+    DeepSeekRequest,
+    DeepSeekStreamChunk,
+    DeepSeekToolCall,
+    DeepSeekUsage,
+    StreamCallbacks,
 } from '../types';
 import {
-	createHttpError,
-	DeepSeekRequestError,
-	formatRequestError,
-	normalizeRequestError,
+    createHttpError,
+    DeepSeekRequestError,
+    formatRequestError,
+    normalizeRequestError,
 } from './error';
 
-const REQUEST_TIMEOUT_MS = 120_000;
-const MAX_CONNECT_RETRIES = 2;
-const RETRY_DELAYS_MS = [1000, 2000];
+const REQUEST_TIMEOUT_MS = 180_000;
+const MAX_CONNECT_RETRIES = 3;
+const RETRY_DELAYS_MS = [1000, 2000, 4000];
 
 /**
  * Lightweight SSE-streaming DeepSeek API client.
@@ -31,8 +31,9 @@ export class DeepSeekClient {
 
 	/**
 	 * Stream a chat completion from the DeepSeek API.
-	 * Automatically retries on transient connection errors (up to 2 retries
-	 * with 1s / 2s backoff). HTTP errors and cancellations are not retried.
+	 * Automatically retries on transient connection errors (up to 3 retries
+	 * with 1s / 2s / 4s exponential backoff). HTTP errors and cancellations
+	 * are not retried.
 	 */
 	async streamChatCompletion(
 		request: DeepSeekRequest,
@@ -322,7 +323,69 @@ const RETRYABLE_NETWORK_PATTERNS = [
 
 function isNetworkError(error: TypeError): boolean {
 	const message = error.message.toLowerCase();
-	return RETRYABLE_NETWORK_PATTERNS.some((pattern) =>
-		message.includes(pattern.toLowerCase()),
-	);
+	if (
+		RETRYABLE_NETWORK_PATTERNS.some((pattern) =>
+			message.includes(pattern.toLowerCase()),
+		)
+	) {
+		return true;
+	}
+	// undici wraps low-level socket errors (ECONNRESET, EPIPE, etc.) in a
+	// TypeError("terminated") where the real error code lives in cause.code.
+	// Walk the cause chain to detect transient network failures that are not
+	// visible in the top-level message.
+	return hasNetworkErrorCause(error);
+}
+
+/**
+ * Recursively check the error cause chain for known network error codes.
+ * Handles patterns like:
+ *   TypeError("terminated") → cause: { code: "ECONNRESET", message: "read ECONNRESET" }
+ *   TypeError("fetch failed") → cause: { code: "UND_ERR_SOCKET", … }
+ */
+function hasNetworkErrorCause(error: unknown): boolean {
+	if (!(error instanceof Error)) {
+		return false;
+	}
+	const cause = (error as Error & { cause?: unknown }).cause;
+	if (!cause) {
+		return false;
+	}
+
+	const causeObj = typeof cause === 'object' && cause !== null
+		? (cause as Record<string, unknown>)
+		: null;
+
+	// Check cause.code (e.g., "ECONNRESET", "UND_ERR_SOCKET")
+	if (causeObj) {
+		const code = causeObj.code;
+		if (typeof code === 'string') {
+			const codeLower = code.toLowerCase();
+			if (
+				RETRYABLE_NETWORK_PATTERNS.some(
+					(p) => p.toLowerCase() === codeLower,
+				)
+			) {
+				return true;
+			}
+		}
+		// Check cause.message (e.g., "read ECONNRESET")
+		const causeMsg = causeObj.message;
+		if (typeof causeMsg === 'string') {
+			const msgLower = causeMsg.toLowerCase();
+			if (
+				RETRYABLE_NETWORK_PATTERNS.some((p) =>
+					msgLower.includes(p.toLowerCase()),
+				)
+			) {
+				return true;
+			}
+		}
+	}
+
+	// Recurse into nested Error causes
+	if (cause instanceof Error) {
+		return hasNetworkErrorCause(cause);
+	}
+	return false;
 }
