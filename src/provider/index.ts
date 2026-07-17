@@ -46,10 +46,16 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			this.onDidChangeLanguageModelChatInformationEmitter,
 			// Settings-based fallback API key + base URL changes.
 			vscode.workspace.onDidChangeConfiguration((e) => {
-				if (
-					e.affectsConfiguration('deepseek-copilot.apiKey') ||
-					e.affectsConfiguration('deepseek-copilot.baseUrl')
-				) {
+				if (e.affectsConfiguration('deepseek-copilot.apiKey')) {
+					// When the user sets an API key in Settings UI, clear
+					// SecretStorage so the settings value takes effect.
+					const config = vscode.workspace.getConfiguration('deepseek-copilot');
+					if (config.get<string>('apiKey')?.trim()) {
+						void this.authManager.deleteApiKey();
+					}
+					this.invalidateCurrencyAndRefreshModels();
+				}
+				if (e.affectsConfiguration('deepseek-copilot.baseUrl')) {
 					this.invalidateCurrencyAndRefreshModels();
 				}
 			}),

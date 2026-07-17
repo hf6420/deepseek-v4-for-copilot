@@ -121,6 +121,12 @@
           "default": "https://api.deepseek.com",
           "description": "%deepseek-copilot.config.baseUrl.description%"
         },
+        "deepseek-copilot.apiKey": {
+          "type": "string",
+          "default": "",
+          "editPresentation": "password",
+          "markdownDescription": "%deepseek-copilot.config.apiKey.description%"
+        },
         "deepseek-copilot.maxTokens": {
           "type": "number",
           "default": 0,
