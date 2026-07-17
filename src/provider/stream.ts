@@ -3,17 +3,17 @@ import { createUserFacingError } from '../client';
 import { logger } from '../logger';
 import type { DeepSeekToolCall, DeepSeekUsage } from '../types';
 import {
-	observeCancellationToken,
-	type CacheDiagnosticsRun,
-	type ReplayMarkerReportTrigger,
+    observeCancellationToken,
+    type CacheDiagnosticsRun,
+    type ReplayMarkerReportTrigger,
 } from './debug';
-import { formatRequestLogLine, type RequestKind } from './routing';
 import {
-	createReplayMarkerPart,
-	hasReplayMarkerMetadata,
-	type ReplayMarkerMetadata,
+    createReplayMarkerPart,
+    hasReplayMarkerMetadata,
+    type ReplayMarkerMetadata,
 } from './replay';
 import type { PreparedChatRequest } from './request';
+import { formatRequestLogLine, type RequestKind } from './routing';
 
 interface ResponseStreamState {
 	accumulatedReasoning: string;
@@ -235,7 +235,12 @@ function handleToolCall(
 		progress.report(
 			new vscode.LanguageModelToolCallPart(toolCall.id, toolCall.function.name, args),
 		);
-	} catch {
+	} catch (error) {
+		logger.warn(
+			'Failed to parse tool call arguments, falling back to empty object. toolCallId=',
+			toolCall.id,
+			error,
+		);
 		progress.report(new vscode.LanguageModelToolCallPart(toolCall.id, toolCall.function.name, {}));
 	}
 }

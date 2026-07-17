@@ -52,7 +52,7 @@ export function getMaxTokens(): number | undefined {
  * settings keep working even if migration cannot update every scope.
  */
 export function getDebugMode(): DebugMode {
-	if (cachedDebugMode) {
+	if (cachedDebugMode !== undefined) {
 		return cachedDebugMode;
 	}
 

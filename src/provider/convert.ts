@@ -1,5 +1,6 @@
 import vscode from 'vscode';
 import { safeStringify } from '../json';
+import { logger } from '../logger';
 import type { DeepSeekMessage, DeepSeekTool, DeepSeekToolCall } from '../types';
 import { parseFirstReplayMarker } from './replay';
 
@@ -46,6 +47,13 @@ export function convertMessages(
 					callId: part.callId,
 					content: toolContent || safeStringify(part.content),
 				});
+			} else {
+				// Unknown part type — log for observability but don't throw,
+				// to keep backward compatibility with future VS Code API additions.
+				logger.warn(
+					'Unknown LanguageModelChatRequestMessage part type encountered during conversion:',
+					part?.constructor?.name ?? part,
+				);
 			}
 		}
 

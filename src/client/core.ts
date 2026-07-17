@@ -208,7 +208,13 @@ export class DeepSeekClient {
 						if (choice.delta.tool_calls) {
 							for (const tc of choice.delta.tool_calls) {
 								let pending = pendingToolCalls.get(tc.index);
-								if (!pending && tc.id) {
+								if (!pending) {
+									if (!tc.id) {
+										logger.warn(
+											`Received tool call delta without id for new tool call index ${tc.index}; skipping delta.`,
+										);
+										continue;
+									}
 									pending = {
 										id: tc.id,
 										type: 'function',
@@ -216,13 +222,11 @@ export class DeepSeekClient {
 									};
 									pendingToolCalls.set(tc.index, pending);
 								}
-								if (pending) {
-									if (tc.function?.name) {
-										pending.function.name += tc.function.name;
-									}
-									if (tc.function?.arguments) {
-										pending.function.arguments += tc.function.arguments;
-									}
+								if (tc.function?.name) {
+									pending.function.name += tc.function.name;
+								}
+								if (tc.function?.arguments) {
+									pending.function.arguments += tc.function.arguments;
 								}
 							}
 						}
