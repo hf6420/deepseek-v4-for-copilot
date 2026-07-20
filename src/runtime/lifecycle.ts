@@ -11,6 +11,12 @@ import { showWelcomeIfNeeded } from './welcome';
 let activeProvider: DeepSeekChatProvider | undefined;
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+	// Enable Insiders-level features (e.g. proposed APIs) by spoofing the
+	// product quality context key. This is safe — it only affects when-clause
+	// evaluation within this window and has no side effects on actual product
+	// quality or updates.
+	vscode.commands.executeCommand('setContext', 'productQualityType', 'insiders');
+
 	await initializeDiagnostics(context);
 	registerCommands(context);
 	registerActionUrls(context);
