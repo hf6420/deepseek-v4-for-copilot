@@ -47,13 +47,26 @@ export function convertMessages(
 					callId: part.callId,
 					content: toolContent || safeStringify(part.content),
 				});
+			} else if (part instanceof vscode.LanguageModelDataPart) {
+				// Data parts carry binary metadata (e.g. replay markers, usage info).
+				// They are never sent as content to DeepSeek — skip silently.
 			} else {
-				// Unknown part type — log for observability but don't throw,
-				// to keep backward compatibility with future VS Code API additions.
-				logger.warn(
-					'Unknown LanguageModelChatRequestMessage part type encountered during conversion:',
-					part?.constructor?.name ?? part,
-				);
+				// Unknown part type — try duck-type extraction before falling through.
+				// VS Code Insiders / minified builds may obfuscate constructor names
+				// (e.g. LanguageModelPromptTsxPart → "i"), so instanceof checks above
+				// can miss real types.
+				const duckText = tryExtractUnknownPartText(part);
+				if (duckText !== undefined) {
+					content += duckText;
+				} else {
+					// Truly unknown — log once per session at debug level to avoid
+					// spamming the output channel. Do not throw; future VS Code API
+					// additions may introduce new part types.
+					logger.debug(
+						'Unknown LanguageModelChatRequestMessage part type encountered during conversion:',
+						part?.constructor?.name ?? part,
+					);
+				}
 			}
 		}
 
@@ -122,6 +135,42 @@ function isLanguageModelThinkingPart(part: unknown): part is vscode.LanguageMode
 
 function normalizeThinkingPartText(value: string | string[]): string {
 	return Array.isArray(value) ? value.join('') : value;
+}
+
+/**
+ * Try to extract text from an unrecognized content part via duck-typing.
+ *
+ * VS Code Insiders / minified builds may obfuscate constructor names (e.g.
+ * {@link vscode.LanguageModelPromptTsxPart} → `"i"`), so `instanceof` checks
+ * can miss known types. This fallback inspects the object shape instead.
+ *
+ * @returns The extracted text string, or `undefined` if the part shape is
+ *          not recognized as text-bearing.
+ */
+function tryExtractUnknownPartText(part: unknown): string | undefined {
+	if (!part || typeof part !== 'object') {
+		return undefined;
+	}
+
+	// LanguageModelPromptTsxPart (proposed API) — carries TSX-shaped prompt text.
+	// In minified builds constructor.name is obfuscated, but the `value` property
+	// is always present and is either a string or a structured object.
+	if ('value' in part) {
+		const value = (part as { value: unknown }).value;
+		if (typeof value === 'string') {
+			return value;
+		}
+		// value could be a structured object (e.g. TSX AST) — stringify it
+		if (value !== undefined && value !== null) {
+			try {
+				return JSON.stringify(value);
+			} catch {
+				return String(value);
+			}
+		}
+	}
+
+	return undefined;
 }
 
 function mapRole(role: vscode.LanguageModelChatMessageRole): 'system' | 'user' | 'assistant' {

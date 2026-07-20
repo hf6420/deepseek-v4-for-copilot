@@ -75,16 +75,22 @@ function estimatePartChars(part: unknown): number {
 		return 0;
 	}
 
-	// 6. LanguageModelPromptTsxPart — stringify the value if present
-	// Duck-type check since PromptTsxPart may not always be available
+	// 6. LanguageModelPromptTsxPart — stringify the value if present.
+	// Duck-type check since PromptTsxPart may not always be available,
+	// and constructor.name is obfuscated in minified VS Code builds.
 	if (
 		part &&
 		typeof part === 'object' &&
 		'value' in part &&
-		part.constructor?.name === 'LanguageModelPromptTsxPart'
+		!('callId' in part) &&       // not ToolCallPart / ToolResultPart
+		!('mimeType' in part)        // not DataPart
 	) {
 		try {
-			return JSON.stringify((part as { value: unknown }).value).length;
+			const value = (part as { value: unknown }).value;
+			if (typeof value === 'string') {
+				return value.length;
+			}
+			return JSON.stringify(value).length;
 		} catch {
 			return 0;
 		}
