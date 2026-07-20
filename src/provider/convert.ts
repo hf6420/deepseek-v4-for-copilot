@@ -70,7 +70,13 @@ export function convertMessages(
 				}
 
 				if (isThinkingModel) {
-					msg.reasoning_content = getReasoningContent(replayMarker, thinkingContent);
+					const reasoning = getReasoningContent(replayMarker, thinkingContent);
+					if (reasoning) {
+						msg.reasoning_content = reasoning;
+					}
+					// When reasoning is empty (e.g. thinking was disabled for this turn),
+					// omit the field entirely so the JSON prefix matches the original
+					// DeepSeek response, preserving prompt cache hit rate.
 				}
 
 				result.push(msg);

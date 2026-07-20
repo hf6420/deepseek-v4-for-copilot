@@ -240,12 +240,13 @@ export class DeepSeekClient {
 						}
 					} catch (e) {
 						// JSON parse failure means the stream is corrupted — abort.
-						// Flush any incomplete tool calls so the caller can report them,
-						// then throw so the retry wrapper calls onError.
-						for (const tc of pendingToolCalls.values()) {
-							callbacks.onToolCall(tc);
-						}
-						pendingToolCalls.clear();
+					// Discard all pending tool calls without emitting them:
+					// at this point we cannot distinguish complete tool calls
+					// (accumulated across chunks but not yet flushed) from
+					// partially-received ones. Emitting incomplete tool calls
+					// would cause downstream agent failures. The retry wrapper
+					// will re-request and deliver complete data.
+					pendingToolCalls.clear();
 						const message = e instanceof Error ? e.message : String(e);
 						throw new Error(
 							`Failed to parse SSE chunk: ${jsonStr.slice(0, 200)} — ${message}`,
