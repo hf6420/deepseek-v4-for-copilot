@@ -118,3 +118,34 @@ export interface ModelDefinition {
 	pricing?: Readonly<Record<PricingCurrency, ModelPricing>>;
 	priceCategory?: PriceCategory;
 }
+
+// ---- Endpoint compatibility ----
+
+/**
+ * User-controlled compatibility mode for individual features.
+ * - 'auto': enable for official DeepSeek API, disable for third-party endpoints.
+ * - 'always': force-enable regardless of endpoint.
+ * - 'never': force-disable regardless of endpoint.
+ */
+export type CompatMode = 'auto' | 'always' | 'never';
+
+/**
+ * Resolved compatibility flags for a specific endpoint.
+ * These are computed once and cached; consumed by request builders.
+ */
+export interface EndpointCompatibility {
+	/** Whether to send `thinking` / `reasoning_effort` params (DeepSeek-specific). */
+	sendThinkingParam: boolean;
+	/** Whether to inject `reasoning_content` into assistant messages (DeepSeek-specific). */
+	sendReasoningContent: boolean;
+	/** Whether to send `stream_options: { include_usage: true }` (OpenAI extension). */
+	sendStreamOptions: boolean;
+	/** Whether to send `tool_choice: "auto"` (OpenAI standard). */
+	sendToolChoice: boolean;
+	/** Temperature parameter (0 = unset). */
+	temperature: number | undefined;
+	/** Top-p parameter (0 = unset). */
+	topP: number | undefined;
+	/** Human-readable provider name for diagnostics. */
+	providerName: string;
+}

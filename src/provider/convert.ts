@@ -1,17 +1,22 @@
 import vscode from 'vscode';
+import { getBaseUrl } from '../config';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type { DeepSeekMessage, DeepSeekTool, DeepSeekToolCall } from '../types';
+import { getEndpointCompatibility } from './compat';
 import { parseFirstReplayMarker } from './replay';
 
 /**
  * Convert VS Code chat messages to DeepSeek format.
- * Injects marker-replayed reasoning_content for assistant messages.
+ * Injects marker-replayed reasoning_content for assistant messages
+ * only when the endpoint supports it.
  */
 export function convertMessages(
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
 	isThinkingModel: boolean,
 ): DeepSeekMessage[] {
+	const compat = getEndpointCompatibility(getBaseUrl());
+	const shouldInjectReasoning = isThinkingModel && compat.sendReasoningContent;
 	const result: DeepSeekMessage[] = [];
 
 	for (const message of messages) {
@@ -72,7 +77,7 @@ export function convertMessages(
 
 		if (role === 'assistant') {
 			if (content || toolCalls.length > 0) {
-				const replayMarker = isThinkingModel ? parseFirstReplayMarker(message) : undefined;
+				const replayMarker = shouldInjectReasoning ? parseFirstReplayMarker(message) : undefined;
 				const msg: DeepSeekMessage = {
 					role: 'assistant' as const,
 					content: content || '',
@@ -82,7 +87,7 @@ export function convertMessages(
 					msg.tool_calls = toolCalls;
 				}
 
-				if (isThinkingModel) {
+				if (shouldInjectReasoning) {
 					const reasoning = getReasoningContent(replayMarker, thinkingContent);
 					if (reasoning) {
 						msg.reasoning_content = reasoning;

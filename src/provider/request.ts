@@ -6,15 +6,16 @@ import { MODELS } from '../consts';
 import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { t } from '../i18n';
 import type { DeepSeekRequest } from '../types';
+import { getEndpointCompatibility } from './compat';
 import { convertMessages, countMessageChars } from './convert';
 import {
-	dumpDeepSeekRequest,
-	type CacheDiagnosticsRecorder,
-	type CacheDiagnosticsRun,
+    dumpDeepSeekRequest,
+    type CacheDiagnosticsRecorder,
+    type CacheDiagnosticsRun,
 } from './debug';
 import { getConfiguredThinkingEffort, type ModelConfigurationOptions } from './models';
-import { classifyDeepSeekRequest, shouldForceThinkingNone, type RequestKind } from './routing';
 import type { ReplayMarkerMetadata } from './replay';
+import { classifyDeepSeekRequest, shouldForceThinkingNone, type RequestKind } from './routing';
 import type { ConversationSegment } from './segment';
 import { collectTrailingToolResultIds, prepareRequestTools } from './tools/request';
 import { resolveImageMessages, type VisionDescriber } from './vision';
@@ -72,14 +73,17 @@ export async function prepareChatRequest({
 	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel);
 	const tools = prepareRequestTools(modelDef?.capabilities.toolCalling, options);
 
+	const compat = getEndpointCompatibility(baseUrl);
 	const totalRequestChars = countMessageChars(deepseekMessages);
 	const baseRequest: DeepSeekRequest = {
 		model: getApiModelId(modelInfo.id),
 		messages: deepseekMessages,
 		stream: true,
 		tools,
-		tool_choice: tools && tools.length > 0 ? ('auto' as const) : undefined,
+		tool_choice: compat.sendToolChoice && tools && tools.length > 0 ? ('auto' as const) : undefined,
 		max_tokens: maxTokens,
+		...(compat.temperature ? { temperature: compat.temperature } : {}),
+		...(compat.topP ? { top_p: compat.topP } : {}),
 	};
 	const requestKind = classifyDeepSeekRequest({
 		request: baseRequest,
@@ -95,7 +99,7 @@ export async function prepareChatRequest({
 	const thinkingEffort = forceNoneThinking ? 'none' : configuredThinkingEffort;
 	const request: DeepSeekRequest = {
 		...baseRequest,
-		...(isThinkingModel
+		...(compat.sendThinkingParam && isThinkingModel
 			? {
 					thinking: {
 						type: thinkingEffort === 'none' ? ('disabled' as const) : ('enabled' as const),

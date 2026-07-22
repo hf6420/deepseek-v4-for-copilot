@@ -1,6 +1,8 @@
 import type { CancellationToken } from 'vscode';
+import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
+import { getEndpointCompatibility, learnFromError } from '../provider/compat';
 import type {
     DeepSeekRequest,
     DeepSeekStreamChunk,
@@ -103,11 +105,13 @@ export class DeepSeekClient {
 		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
 		try {
-			// Request usage stats in streaming responses so we can calibrate token counting.
-			const requestBody = {
-				...request,
-				stream_options: { include_usage: true },
-			};
+			// Build request body, conditionally including stream_options based on
+			// endpoint compatibility (third-party proxies may reject this field).
+			const compat = getEndpointCompatibility(this.baseUrl);
+			const requestBody: Record<string, unknown> = { ...request };
+			if (compat.sendStreamOptions) {
+				requestBody.stream_options = { include_usage: true };
+			}
 
 			const response = await fetch(`${this.baseUrl}/chat/completions`, {
 				method: 'POST',
@@ -120,6 +124,17 @@ export class DeepSeekClient {
 			});
 
 			if (!response.ok) {
+				// Adaptive learning: on 400 errors from non-official endpoints,
+				// try to infer unsupported fields from the error message and
+				// disable them for future requests.
+				if (response.status === 400 && !isOfficialDeepSeekBaseUrl(this.baseUrl)) {
+					try {
+						const errorText = await response.text();
+						learnFromError(this.baseUrl, errorText);
+					} catch {
+						// Best-effort learning — never throw from diagnostics path.
+					}
+				}
 				throw await createHttpError(response, { baseUrl: this.baseUrl, request });
 			}
 
@@ -163,7 +178,7 @@ export class DeepSeekClient {
 						continue;
 					}
 
-					if (trimmed === 'data: [DONE]') {
+					if (trimmed.toLowerCase() === 'data: [done]') {
 						// Flush any remaining tool calls
 						for (const tc of pendingToolCalls.values()) {
 							callbacks.onToolCall(tc);

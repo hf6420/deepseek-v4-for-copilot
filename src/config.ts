@@ -153,3 +153,53 @@ function getScopedValue<T>(
 	}
 	return undefined;
 }
+
+// ---- Endpoint compatibility settings ----
+
+/**
+ * Get user-configured thinking parameter mode.
+ * Controls whether `thinking` / `reasoning_effort` are sent to the API.
+ * Default: 'auto' (send to official DeepSeek API only).
+ */
+export function getThinkingParamMode(): import('./types').CompatMode {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<import('./types').CompatMode>('compat.thinkingParam', 'auto');
+}
+
+/**
+ * Get user-configured stream_options mode.
+ * Controls whether `stream_options: { include_usage: true }` is sent.
+ * Default: 'auto' (send to all OpenAI-compatible endpoints).
+ */
+export function getStreamOptionsMode(): import('./types').CompatMode {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<import('./types').CompatMode>('compat.streamOptions', 'auto');
+}
+
+/**
+ * Get user-configured tool_choice mode.
+ * Controls whether `tool_choice: "auto"` is sent.
+ * Default: 'auto' (send to all OpenAI-compatible endpoints).
+ */
+export function getToolChoiceMode(): import('./types').CompatMode {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<import('./types').CompatMode>('compat.toolChoice', 'auto');
+}
+
+/**
+ * Get user-configured temperature override.
+ * Returns 0 (unset) by default — DeepSeek API uses its own default.
+ */
+export function getTemperature(): number {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<number>('temperature', 0);
+}
+
+/**
+ * Get user-configured top_p override.
+ * Returns 0 (unset) by default — DeepSeek API uses its own default.
+ */
+export function getTopP(): number {
+	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
+	return config.get<number>('topP', 0);
+}
