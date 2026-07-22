@@ -127,9 +127,11 @@ export class DeepSeekClient {
 				// Adaptive learning: on 400 errors from non-official endpoints,
 				// try to infer unsupported fields from the error message and
 				// disable them for future requests.
+				// Clone the response first so the original body remains readable
+				// for createHttpError below.
 				if (response.status === 400 && !isOfficialDeepSeekBaseUrl(this.baseUrl)) {
 					try {
-						const errorText = await response.text();
+						const errorText = await response.clone().text();
 						learnFromError(this.baseUrl, errorText);
 					} catch {
 						// Best-effort learning — never throw from diagnostics path.
