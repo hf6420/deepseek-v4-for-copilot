@@ -87,7 +87,10 @@ export class DeepSeekClient {
 
 	/**
 	 * Execute a single streaming request attempt.
-	 * Throws on failure — retry logic is handled by the caller.
+	 * Automatically retries once after adaptive compatibility learning
+	 * (when learnFromError disables an unsupported field for a third-party
+	 * endpoint). Throws on unrecoverable failure — outer retry loop handles
+	 * transient connection errors.
 	 */
 	private async _performStreamRequest(
 		request: DeepSeekRequest,
@@ -105,53 +108,89 @@ export class DeepSeekClient {
 		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
 		try {
-			// Build request body, conditionally including stream_options based on
-			// endpoint compatibility (third-party proxies may reject this field).
-			const compat = getEndpointCompatibility(this.baseUrl);
-			const requestBody: Record<string, unknown> = { ...request };
-			if (compat.sendStreamOptions) {
-				requestBody.stream_options = { include_usage: true };
-			}
+			// Inner loop: retry at most once after adaptive capability learning.
+			// The first iteration sends the request with current compatibility.
+			// If a 400 error triggers learnFromError and capabilities change,
+			// the second iteration rebuilds the body with updated compat and
+			// retries the fetch without user intervention.
+			for (let compatRetry = 0; compatRetry < 2; compatRetry++) {
+				const compat = getEndpointCompatibility(this.baseUrl);
+				const requestBody: Record<string, unknown> = { ...request };
+				if (compat.sendStreamOptions) {
+					requestBody.stream_options = { include_usage: true };
+				}
 
-			const response = await fetch(`${this.baseUrl}/chat/completions`, {
-				method: 'POST',
-				headers: {
-					'Content-Type': 'application/json',
-					Authorization: `Bearer ${this.apiKey}`,
-				},
-				body: safeStringify(requestBody),
-				signal: controller.signal,
-			});
+				const response = await fetch(`${this.baseUrl}/chat/completions`, {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+						Authorization: `Bearer ${this.apiKey}`,
+					},
+					body: safeStringify(requestBody),
+					signal: controller.signal,
+				});
 
-			if (!response.ok) {
-				// Adaptive learning: on 400 errors from non-official endpoints,
-				// try to infer unsupported fields from the error message and
-				// disable them for future requests.
-				// Clone the response first so the original body remains readable
-				// for createHttpError below.
-				if (response.status === 400 && !isOfficialDeepSeekBaseUrl(this.baseUrl)) {
+				if (response.ok) {
+					return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
+				}
+
+				// Adaptive learning: on 400 errors from non-official endpoints, try
+				// to infer unsupported fields from the error message and retry once
+				// with the corrected compatibility.
+				if (
+					compatRetry === 0 &&
+					response.status === 400 &&
+					!isOfficialDeepSeekBaseUrl(this.baseUrl)
+				) {
 					try {
 						const errorText = await response.clone().text();
-						learnFromError(this.baseUrl, errorText);
+						const learned = learnFromError(this.baseUrl, errorText);
+						if (learned) {
+							logger.info(
+								`[compat] Compatibility updated for ${this.baseUrl} — retrying request with corrected fields`,
+							);
+							continue; // Retry with updated compat
+						}
 					} catch {
-						// Best-effort learning — never throw from diagnostics path.
+						// Best-effort learning — fall through to throw below.
 					}
 				}
+
 				throw await createHttpError(response, { baseUrl: this.baseUrl, request });
 			}
 
-			if (!response.body) {
-				throw new Error('No response body received');
-			}
+			// Should be unreachable — the loop always either returns, continues,
+			// or throws. Fallback just in case.
+			throw new Error('Unexpected: compat retry loop exhausted');
+		} finally {
+			cancelListener?.dispose();
+			clearTimeout(timeout);
+		}
+	}
 
-			const reader = response.body.getReader();
-			const decoder = new TextDecoder();
-			let buffer = '';
-			let latestUsage: DeepSeekUsage | undefined;
+	/**
+	 * Process a successful streaming response body, dispatching SSE events
+	 * to the appropriate callbacks.
+	 */
+	private async _processStreamResponse(
+		response: Response,
+		callbacks: StreamCallbacks,
+		cancellationToken: CancellationToken | undefined,
+		controller: AbortController,
+	): Promise<void> {
+		if (!response.body) {
+			throw new Error('No response body received');
+		}
 
-			// Accumulate tool call deltas by index, then emit on finish_reason=stop/tool_calls
-			const pendingToolCalls = new Map<number, DeepSeekToolCall>();
+		const reader = response.body.getReader();
+		const decoder = new TextDecoder();
+		let buffer = '';
+		let latestUsage: DeepSeekUsage | undefined;
 
+		// Accumulate tool call deltas by index, then emit on finish_reason=stop/tool_calls
+		const pendingToolCalls = new Map<number, DeepSeekToolCall>();
+
+		try {
 			while (true) {
 				if (cancellationToken?.isCancellationRequested) {
 					controller.abort();
@@ -257,13 +296,13 @@ export class DeepSeekClient {
 						}
 					} catch (e) {
 						// JSON parse failure means the stream is corrupted — abort.
-					// Discard all pending tool calls without emitting them:
-					// at this point we cannot distinguish complete tool calls
-					// (accumulated across chunks but not yet flushed) from
-					// partially-received ones. Emitting incomplete tool calls
-					// would cause downstream agent failures. The retry wrapper
-					// will re-request and deliver complete data.
-					pendingToolCalls.clear();
+						// Discard all pending tool calls without emitting them:
+						// at this point we cannot distinguish complete tool calls
+						// (accumulated across chunks but not yet flushed) from
+						// partially-received ones. Emitting incomplete tool calls
+						// would cause downstream agent failures. The retry wrapper
+						// will re-request and deliver complete data.
+						pendingToolCalls.clear();
 						const message = e instanceof Error ? e.message : String(e);
 						throw new Error(
 							`Failed to parse SSE chunk: ${jsonStr.slice(0, 200)} — ${message}`,
@@ -275,14 +314,12 @@ export class DeepSeekClient {
 			reportFinalUsage(callbacks, latestUsage);
 			callbacks.onDone();
 		} catch (error) {
+			// Silently swallow AbortError triggered by cancellation — the user
+			// intentionally stopped the request; an error message is confusing.
 			if (isAbortError(error) && cancellationToken?.isCancellationRequested) {
 				return;
 			}
-			// Re-throw to let the retry wrapper decide
 			throw error;
-		} finally {
-			clearTimeout(timeout);
-			cancelListener?.dispose();
 		}
 	}
 }

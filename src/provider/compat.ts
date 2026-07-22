@@ -84,12 +84,14 @@ export function getEndpointCompatibility(baseUrl: string): EndpointCompatibility
  * Evolve adaptive capabilities when a request fails with a 400 error,
  * inferring which field caused the error from the response message.
  * Only disables non-essential fields — never escalates.
+ *
+ * @returns true if the compatibility was mutated (so callers can retry).
  */
-export function learnFromError(baseUrl: string, errorMessage: string): void {
+export function learnFromError(baseUrl: string, errorMessage: string): boolean {
 	const lowered = errorMessage.toLowerCase();
 	const cached = capabilityCache.get(baseUrl);
 	if (!cached) {
-		return;
+		return false;
 	}
 
 	let changed = false;
@@ -130,16 +132,43 @@ export function learnFromError(baseUrl: string, errorMessage: string): void {
 			compatibility: compat,
 		});
 	}
+
+	return changed;
 }
 
 function hasFieldError(errorMessage: string, fieldName: string): boolean {
+	// Match against both English and Chinese (zh-cn) error patterns so
+	// third-party proxies that localise their error messages are covered.
 	return (
-		errorMessage.includes(`unknown field`) ||
-		errorMessage.includes(`unrecognized field`) ||
-		errorMessage.includes(`unexpected field`) ||
-		errorMessage.includes(`invalid field`) ||
-		errorMessage.includes(`unknown parameter`) ||
-		errorMessage.includes(`unrecognized parameter`) ||
-		errorMessage.includes(`not supported`)
+		hasFieldErrorPattern(errorMessage) ||
+		hasFieldErrorPatternChinese(errorMessage)
 	) && errorMessage.includes(fieldName);
+}
+
+function hasFieldErrorPattern(message: string): boolean {
+	return (
+		message.includes(`unknown field`) ||
+		message.includes(`unrecognized field`) ||
+		message.includes(`unexpected field`) ||
+		message.includes(`invalid field`) ||
+		message.includes(`unknown parameter`) ||
+		message.includes(`unrecognized parameter`) ||
+		message.includes(`not supported`)
+	);
+}
+
+function hasFieldErrorPatternChinese(message: string): boolean {
+	return (
+		message.includes(`未知字段`) ||
+		message.includes(`无法识别`) ||
+		message.includes(`不支持的字段`) ||
+		message.includes(`不支持的参数`) ||
+		message.includes(`不识别的字段`) ||
+		message.includes(`不识别的参数`) ||
+		message.includes(`未预期的字段`) ||
+		message.includes(`无效的字段`) ||
+		message.includes(`无效的参数`) ||
+		message.includes(`不被支持`) ||
+		message.includes(`不支持`)
+	);
 }

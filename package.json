@@ -135,7 +135,7 @@
         },
         "deepseek-copilot.experimental.stabilizeToolList": {
           "type": "boolean",
-          "default": false,
+          "default": true,
           "markdownDescription": "%deepseek-copilot.config.experimental.stabilizeToolList.description%",
           "tags": [
             "experimental"

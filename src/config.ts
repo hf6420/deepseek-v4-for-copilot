@@ -84,7 +84,7 @@ export function getRequestDumpEnabled(): boolean {
 
 export function getStabilizeToolListEnabled(): boolean {
 	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);
-	return config.get<boolean>('experimental.stabilizeToolList', false);
+	return config.get<boolean>('experimental.stabilizeToolList', true);
 }
 
 /**

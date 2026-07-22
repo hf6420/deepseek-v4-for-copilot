@@ -2,12 +2,12 @@ import vscode from 'vscode';
 import { t } from '../../i18n';
 import { logToolFlowDiagnostics } from '../debug';
 import type { RequestKind } from '../routing';
-import { ACTIVATE_TOOL_PREFIX, MAX_PREFLIGHT_ROUNDS_PER_USER_REQUEST } from './consts';
+import { ACTIVATE_TOOL_PREFIX, MAX_PREFLIGHT_ROUNDS_PER_USER_REQUEST, PREFLIGHT_ACTIVATE_CALL_ID_PREFIX, TOOL_DRIFT_NOTICE_START, VISION_PROXY_NOTICE_START } from './consts';
 import { createToolDriftNotice, filterProviderNotices } from './notices';
 import {
-	createPreflightToolCallId,
-	filterPreflightControlFlow,
-	inspectActivatePreflight,
+    createPreflightToolCallId,
+    filterPreflightControlFlow,
+    inspectActivatePreflight,
 } from './preflight';
 
 interface ToolFlowOptions {
@@ -31,7 +31,12 @@ export function processToolFlow({
 	progress,
 	requestKind,
 }: ToolFlowOptions): ToolFlowResult {
-	const filteredMessages = filterProviderNotices(filterPreflightControlFlow(messages));
+	// Fast path: in the common case there are no preflight callIds and no
+	// provider-notice markers. Skip both filtering passes entirely.
+	const needsFiltering = hasFilterableContent(messages);
+	const filteredMessages = needsFiltering
+		? filterProviderNotices(filterPreflightControlFlow(messages))
+		: messages;
 	const messagesFiltered = filteredMessages !== messages;
 
 	if (!stabilizeToolList) {
@@ -101,4 +106,41 @@ export function processToolFlow({
 		messages: filteredMessages,
 		initialResponseNotice: hasUnexpandedActivateTools ? createToolDriftNotice() : undefined,
 	};
+}
+
+/**
+ * Quick pre-scan to determine whether the message list contains any
+ * content that needs filtering (preflight callIds or provider-notice
+ * markers). Returns false for the common case so we can skip the
+ * two full-pass filters entirely.
+ */
+function hasFilterableContent(
+	messages: readonly vscode.LanguageModelChatRequestMessage[],
+): boolean {
+	for (const message of messages) {
+		for (const part of message.content) {
+			// Preflight: check tool-call / tool-result parts for the preflight prefix.
+			if (
+				(part instanceof vscode.LanguageModelToolCallPart ||
+					part instanceof vscode.LanguageModelToolResultPart) &&
+				part.callId.startsWith(PREFLIGHT_ACTIVATE_CALL_ID_PREFIX)
+			) {
+				return true;
+			}
+			// Provider notices: check text parts in assistant messages for marker blocks.
+			if (
+				message.role === vscode.LanguageModelChatMessageRole.Assistant &&
+				part instanceof vscode.LanguageModelTextPart
+			) {
+				const text = part.value;
+				if (
+					text.includes(TOOL_DRIFT_NOTICE_START) ||
+					text.includes(VISION_PROXY_NOTICE_START)
+				) {
+					return true;
+				}
+			}
+		}
+	}
+	return false;
 }
