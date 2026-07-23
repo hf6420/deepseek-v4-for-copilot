@@ -1,12 +1,12 @@
 import vscode from 'vscode';
 import { t } from '../../i18n';
-import {
-	TOOL_DRIFT_NOTICE_END,
-	TOOL_DRIFT_NOTICE_START,
-	VISION_PROXY_NOTICE_END,
-	VISION_PROXY_NOTICE_START,
-} from './consts';
 import { formatVisionProxyDisplayMessage } from '../vision/protocols/errors';
+import {
+    TOOL_DRIFT_NOTICE_END,
+    TOOL_DRIFT_NOTICE_START,
+    VISION_PROXY_NOTICE_END,
+    VISION_PROXY_NOTICE_START,
+} from './consts';
 
 type LanguageModelChatRequestMessagePart =
 	vscode.LanguageModelChatRequestMessage['content'][number];
@@ -130,7 +130,13 @@ function stripProviderNotice(value: string, startMarker: string, endMarker: stri
 		}
 
 		const endMarkerIndex = result.indexOf(endMarker, startIndex);
-		const endIndex = endMarkerIndex < 0 ? result.length : endMarkerIndex + endMarker.length;
+		if (endMarkerIndex < 0) {
+			// End marker not found — the start marker text may be part of the
+			// LLM's natural output (e.g. a code snippet or explanation quoting the
+			// marker text). Do not delete to end-of-string; treat as no match.
+			return result;
+		}
+		const endIndex = endMarkerIndex + endMarker.length;
 		result = removeRangeWithWhitespace(result, startIndex, endIndex);
 	}
 }

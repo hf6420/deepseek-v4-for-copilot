@@ -8,14 +8,14 @@ import { LANGUAGE_MODEL_CHAT_SYSTEM_ROLE } from '../../consts';
 import { safeStringify, toWellFormedString } from '../../json';
 import { logger } from '../../logger';
 import type { DeepSeekMessage, DeepSeekRequest } from '../../types';
-import {
-	classifyDeepSeekRequest,
-	classifyProviderRequest,
-	formatModelFields,
-	formatRequestLogLine,
-	type RequestKind,
-} from '../routing';
 import { parseReplayMarkerData, REPLAY_MARKER_MIME } from '../replay';
+import {
+    classifyDeepSeekRequest,
+    classifyProviderRequest,
+    formatModelFields,
+    formatRequestLogLine,
+    type RequestKind,
+} from '../routing';
 import type { ConversationSegment } from '../segment';
 import { ACTIVATE_TOOL_PREFIX } from '../tools/consts';
 import type { VisionProxySource, VisionResolutionStats } from '../vision';
@@ -218,7 +218,7 @@ export function dumpDeepSeekRequest(
 		);
 
 		if (msg0 && paths.msg0) {
-			await writeTextFile(paths.msg0, msg0.content);
+			await writeTextFile(paths.msg0, msg0.content ?? '');
 		}
 
 		await writeDumpObservation(

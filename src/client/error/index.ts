@@ -2,16 +2,16 @@ import { isOfficialDeepSeekBaseUrl } from '../../endpoint';
 import { t } from '../../i18n';
 import { safeStringify } from '../../json';
 import { API_PROVIDER_HTTP_ERROR_LINKS, MAX_DIAGNOSTIC_FIELD_LENGTH } from '../consts';
-import { getNetworkErrorCauseInfo, getNetworkErrorCode, getNetworkErrorMessage } from './network';
 import type {
-	ApiProviderId,
-	DeepSeekRequestErrorKind,
-	ErrorActionLink,
-	ErrorActionUrls,
-	HttpErrorLinkDefinition,
-	HttpErrorLinkStatusKey,
-	RequestErrorContext,
+    ApiProviderId,
+    DeepSeekRequestErrorKind,
+    ErrorActionLink,
+    ErrorActionUrls,
+    HttpErrorLinkDefinition,
+    HttpErrorLinkStatusKey,
+    RequestErrorContext,
 } from '../types';
+import { getNetworkErrorCauseInfo, getNetworkErrorCode, getNetworkErrorMessage } from './network';
 export type { DeepSeekRequestErrorKind, ErrorActionUrls } from '../types';
 
 const errorActionUrlStore = (() => {
@@ -299,7 +299,7 @@ function getRequestDiagnosticMessage(context: RequestErrorContext): string {
 		request.tool_choice ? `toolChoice=${safeStringify(request.tool_choice)}` : undefined,
 		`toolCount=${request.tools?.length ?? 0}`,
 		`messageCount=${request.messages.length}`,
-		`messageChars=${request.messages.reduce((total, message) => total + message.content.length, 0)}`,
+		`messageChars=${request.messages.reduce((total, message) => total + (message.content?.length ?? 0), 0)}`,
 	);
 }
 

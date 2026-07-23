@@ -6,7 +6,7 @@
 
 export interface DeepSeekMessage {
 	role: 'system' | 'user' | 'assistant' | 'tool';
-	content: string;
+	content: string | null;
 	tool_call_id?: string;
 	tool_calls?: DeepSeekToolCall[];
 	reasoning_content?: string;

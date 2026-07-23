@@ -80,7 +80,7 @@ export function convertMessages(
 				const replayMarker = shouldInjectReasoning ? parseFirstReplayMarker(message) : undefined;
 				const msg: DeepSeekMessage = {
 					role: 'assistant' as const,
-					content: content || '',
+					content: content || (toolCalls.length > 0 ? null : ''),
 				};
 
 				if (toolCalls.length > 0) {

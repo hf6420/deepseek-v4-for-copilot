@@ -134,12 +134,12 @@ export class DeepSeekClient {
 					return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
 				}
 
-				// Adaptive learning: on 400 errors from non-official endpoints, try
+				// Adaptive learning: on 400 / 422 errors from non-official endpoints,
 				// to infer unsupported fields from the error message and retry once
 				// with the corrected compatibility.
 				if (
 					compatRetry === 0 &&
-					response.status === 400 &&
+					(response.status === 400 || response.status === 422) &&
 					!isOfficialDeepSeekBaseUrl(this.baseUrl)
 				) {
 					try {
