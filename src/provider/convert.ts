@@ -199,14 +199,20 @@ export function convertTools(
 		return undefined;
 	}
 
-	return tools.map((tool) => ({
-		type: 'function' as const,
-		function: {
-			name: tool.name,
-			description: tool.description,
-			parameters: tool.inputSchema as Record<string, unknown> | undefined,
-		},
-	}));
+	// Sort by function name to produce a stable JSON serialization regardless
+	// of the order VS Code / Copilot passes the tools array. DeepSeek's prompt
+	// cache matches on the request body prefix — an unstable tool ordering
+	// would invalidate the cache even when the tool set is identical.
+	return tools
+		.map((tool) => ({
+			type: 'function' as const,
+			function: {
+				name: tool.name,
+				description: tool.description,
+				parameters: tool.inputSchema as Record<string, unknown> | undefined,
+			},
+		}))
+		.sort((a, b) => a.function.name.localeCompare(b.function.name));
 }
 
 /**

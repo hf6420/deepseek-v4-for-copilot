@@ -32,13 +32,28 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 
 	private readonly cacheDiagnostics = createCacheDiagnosticsRecorder();
 
+	/**
+	 * Shared chars-per-token ratio calibrated across requests via EMA.
+	 * Seeded from the default and updated after each streaming response
+	 * receives actual usage data. Used by both provideTokenCount and
+	 * streamChatCompletion so token estimates stay accurate for CJK text
+	 * where the default 4.0 chars/token ratio is a significant overestimate.
+	 */
+	private charsPerToken = DEFAULT_CHARS_PER_TOKEN;
+
 	/** Vision proxy: internal bridge + VS Code LM fallback. */
 	private readonly vision: ReturnType<typeof createVisionService>;
 	private readonly balanceCurrencyResolver: BalanceCurrencyResolver;
 
-	constructor(context: vscode.ExtensionContext) {
+	/**
+	 * @param context VS Code extension context.
+	 * @param sharedAuthManager Optional shared AuthManager from the wrapping
+	 *   HFChatProvider. When provided, avoids duplicate SecretStorage
+	 *   listeners and cache instances.
+	 */
+	constructor(context: vscode.ExtensionContext, sharedAuthManager?: AuthManager) {
 		this.context = context;
-		this.authManager = new AuthManager(context);
+		this.authManager = sharedAuthManager ?? new AuthManager(context);
 		this.globalStorageUri = context.globalStorageUri;
 		this.vision = createVisionService(context);
 		this.balanceCurrencyResolver = new BalanceCurrencyResolver(context, this.authManager, () =>
@@ -62,9 +77,14 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 					this.invalidateCurrencyAndRefreshModels();
 				}
 			}),
-			// Multi-window: SecretStorage changes don't fire onDidChangeConfiguration.
-			// When another window sets/clears the API key, refresh this window's
-			// model picker so the warning state stays in sync.
+		);
+
+		// Multi-window: SecretStorage changes don't fire onDidChangeConfiguration.
+		// When another window sets/clears the API key, refresh this window's
+		// model picker and currency cache so the warning/price state stays in sync.
+		// Always registered — HFChatProvider only handles model picker refresh,
+		// not currency invalidation.
+		context.subscriptions.push(
 			context.secrets.onDidChange((e) => {
 				if (e.key === 'deepseek-copilot.apiKey') {
 					this.invalidateCurrencyAndRefreshModels();
@@ -204,8 +224,10 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			getVisionDescriber: () => this.vision.get(),
 		});
 
-		// Per-request closure avoids cross-request token calibration drift.
-		const charsPerToken = { value: DEFAULT_CHARS_PER_TOKEN };
+		// Seed from the shared calibrated value so EMA learning persists
+		// across requests. The per-request closure still isolates concurrent
+		// requests from each other's intermediate updates.
+		const charsPerToken = { value: this.charsPerToken };
 		return streamChatCompletion({
 			prepared,
 			progress,
@@ -217,6 +239,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			getCharsPerToken: () => charsPerToken.value,
 			setCharsPerToken: (value) => {
 				charsPerToken.value = value;
+				this.charsPerToken = value;
 			},
 		});
 	}
@@ -226,7 +249,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		text: string | vscode.LanguageModelChatRequestMessage,
 		_token: vscode.CancellationToken,
 	): Promise<number> {
-		return estimateTokenCount(text, DEFAULT_CHARS_PER_TOKEN);
+		return estimateTokenCount(text, this.charsPerToken);
 	}
 }
 

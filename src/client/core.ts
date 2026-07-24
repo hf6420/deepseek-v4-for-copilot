@@ -2,7 +2,7 @@ import type { CancellationToken } from 'vscode';
 import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
-import { getEndpointCompatibility, learnFromError } from '../provider/compat';
+import { getEndpointCompatibility, learnFromError, recordRequestSuccess } from '../provider/compat';
 import type {
     DeepSeekRequest,
     DeepSeekStreamChunk,
@@ -19,7 +19,69 @@ import {
 
 const REQUEST_TIMEOUT_MS = 180_000;
 const MAX_CONNECT_RETRIES = 3;
-const RETRY_DELAYS_MS = [1000, 2000, 4000];
+const BASE_RETRY_DELAYS_MS = [1000, 2000, 4000];
+
+/**
+ * Compute a jittered retry delay to avoid thundering-herd effects when
+ * multiple clients (or VS Code windows) retry simultaneously after a
+ * transient API outage. Jitter range: ±30% of the base delay.
+ */
+function jitteredDelay(baseMs: number): number {
+	const jitter = baseMs * 0.3;
+	return baseMs + (Math.random() * 2 - 1) * jitter;
+}
+
+// ---- Circuit breaker (per-endpoint) ----
+
+interface CircuitState {
+	consecutiveFailures: number;
+	lastFailureTime: number;
+	openUntil: number;
+}
+
+const CIRCUIT_BREAKER_THRESHOLD = 5;
+const CIRCUIT_BREAKER_COOLDOWN_MS = 30_000;
+
+const circuitStates = new Map<string, CircuitState>();
+
+/**
+ * Check whether a request to the given baseUrl is allowed by the circuit
+ * breaker. Returns false when the circuit is open (too many consecutive
+ * failures).
+ */
+function circuitBreakerAllows(baseUrl: string): boolean {
+	const state = circuitStates.get(baseUrl);
+	if (!state || state.consecutiveFailures < CIRCUIT_BREAKER_THRESHOLD) {
+		return true;
+	}
+	if (Date.now() >= state.openUntil) {
+		// Cooldown elapsed — transition to half-open for the next request.
+		circuitStates.delete(baseUrl);
+		return true;
+	}
+	return false;
+}
+
+function circuitBreakerRecordSuccess(baseUrl: string): void {
+	circuitStates.delete(baseUrl);
+}
+
+function circuitBreakerRecordFailure(baseUrl: string): void {
+	const state = circuitStates.get(baseUrl) ?? {
+		consecutiveFailures: 0,
+		lastFailureTime: 0,
+		openUntil: 0,
+	};
+	state.consecutiveFailures += 1;
+	state.lastFailureTime = Date.now();
+	if (state.consecutiveFailures >= CIRCUIT_BREAKER_THRESHOLD) {
+		state.openUntil = Date.now() + CIRCUIT_BREAKER_COOLDOWN_MS;
+		logger.warn(
+			`[circuit-breaker] Circuit OPEN for ${baseUrl} after ${state.consecutiveFailures} consecutive failures — cooling down for ${CIRCUIT_BREAKER_COOLDOWN_MS / 1000}s`,
+		);
+	}
+	circuitStates.set(baseUrl, state);
+}
 
 /**
  * Lightweight SSE-streaming DeepSeek API client.
@@ -30,6 +92,11 @@ export class DeepSeekClient {
 		private readonly baseUrl: string,
 		private readonly apiKey: string,
 	) {}
+
+	/** The API base URL for per-endpoint diagnostic tracking. */
+	get endpointBaseUrl(): string {
+		return this.baseUrl;
+	}
 
 	/**
 	 * Stream a chat completion from the DeepSeek API.
@@ -42,25 +109,49 @@ export class DeepSeekClient {
 		callbacks: StreamCallbacks,
 		cancellationToken?: CancellationToken,
 	): Promise<void> {
+		// Circuit breaker: if this endpoint has too many consecutive failures,
+		// fail fast without hammering the API.
+		if (!circuitBreakerAllows(this.baseUrl)) {
+			const error = new DeepSeekRequestError({
+				message: `Circuit breaker open for ${this.baseUrl} — too many consecutive failures`,
+				userSummary: `DeepSeek API is temporarily unavailable due to repeated failures. The extension will automatically retry after a short cooldown.`,
+				kind: 'network',
+				baseUrl: this.baseUrl,
+				code: 'CIRCUIT_OPEN',
+			});
+			logger.error('DeepSeek request blocked by circuit breaker:', error.message);
+			callbacks.onError(error);
+			return;
+		}
+
 		for (let attempt = 0; attempt <= MAX_CONNECT_RETRIES; attempt++) {
 			if (cancellationToken?.isCancellationRequested) {
 				return;
 			}
 
 			if (attempt > 0) {
-				const delay = RETRY_DELAYS_MS[attempt - 1];
+				const delay = jitteredDelay(BASE_RETRY_DELAYS_MS[attempt - 1]);
 				logger.warn(
-					`Retrying request after connection error (attempt ${attempt + 1}/${MAX_CONNECT_RETRIES + 1}, waiting ${delay}ms)`,
+					`Retrying request after connection error (attempt ${attempt + 1}/${MAX_CONNECT_RETRIES + 1}, waiting ~${Math.round(delay)}ms)`,
 				);
 				await new Promise((resolve) => setTimeout(resolve, delay));
 			}
 
 			try {
 				await this._performStreamRequest(request, callbacks, cancellationToken);
+				circuitBreakerRecordSuccess(this.baseUrl);
 				return;
 			} catch (error) {
 				if (cancellationToken?.isCancellationRequested) {
 					return;
+				}
+
+				// Only count retryable (transient network) errors toward the
+				// circuit breaker. Non-retryable errors (HTTP 401, 402, etc.)
+				// are not indicative of endpoint health and should not trip
+				// the circuit.
+				if (isRetryableError(error)) {
+					circuitBreakerRecordFailure(this.baseUrl);
 				}
 
 				if (!isRetryableError(error) || attempt >= MAX_CONNECT_RETRIES) {
@@ -131,8 +222,9 @@ export class DeepSeekClient {
 				});
 
 				if (response.ok) {
-					return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
-				}
+				recordRequestSuccess(this.baseUrl);
+				return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
+			}
 
 				// Adaptive learning: on 400 / 422 errors from non-official endpoints,
 				// to infer unsupported fields from the error message and retry once
@@ -194,6 +286,7 @@ export class DeepSeekClient {
 			while (true) {
 				if (cancellationToken?.isCancellationRequested) {
 					controller.abort();
+					void reader.cancel('cancelled').catch(() => { /* best-effort */ });
 					return;
 				}
 
@@ -314,6 +407,9 @@ export class DeepSeekClient {
 			reportFinalUsage(callbacks, latestUsage);
 			callbacks.onDone();
 		} catch (error) {
+			// Release the reader lock in all error paths to prevent resource leaks.
+			void reader.cancel('error').catch(() => { /* best-effort */ });
+
 			// Silently swallow AbortError triggered by cancellation — the user
 			// intentionally stopped the request; an error message is confusing.
 			if (isAbortError(error) && cancellationToken?.isCancellationRequested) {

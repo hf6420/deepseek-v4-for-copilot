@@ -3,14 +3,14 @@ import { createUserFacingError } from '../client';
 import { logger } from '../logger';
 import type { DeepSeekToolCall, DeepSeekUsage } from '../types';
 import {
-    observeCancellationToken,
-    type CacheDiagnosticsRun,
-    type ReplayMarkerReportTrigger,
+	observeCancellationToken,
+	type CacheDiagnosticsRun,
+	type ReplayMarkerReportTrigger,
 } from './debug';
 import {
-    createReplayMarkerPart,
-    hasReplayMarkerMetadata,
-    type ReplayMarkerMetadata,
+	createReplayMarkerPart,
+	hasReplayMarkerMetadata,
+	type ReplayMarkerMetadata,
 } from './replay';
 import type { PreparedChatRequest } from './request';
 import { formatRequestLogLine, type RequestKind } from './routing';
@@ -23,6 +23,12 @@ interface ResponseStreamState {
 }
 
 const COPILOT_USAGE_DATA_PART_MIME = 'usage';
+
+/** Number of consecutive replay marker failures before warning the user. */
+const REPLAY_MARKER_FAILURE_WARN_THRESHOLD = 3;
+
+/** Track consecutive replay marker failures per endpoint (by baseUrl). */
+const replayFailureCount = new Map<string, number>();
 
 export interface StreamChatCompletionOptions {
 	prepared: PreparedChatRequest;
@@ -185,7 +191,12 @@ function reportReplayMarker(
 			visionTextChars: prepared.visionMarkerTextChars,
 			reasoningTextChars: state.accumulatedReasoning.length || undefined,
 		});
+		// Reset failure counter on success.
+		replayFailureCount.delete(prepared.client.endpointBaseUrl);
 	} catch (error) {
+		const prev = replayFailureCount.get(prepared.client.endpointBaseUrl) ?? 0;
+		const current = prev + 1;
+		replayFailureCount.set(prepared.client.endpointBaseUrl, current);
 		prepared.cacheDiagnostics.onReplayMarkerReport({
 			status: 'failed',
 			trigger,
@@ -197,6 +208,27 @@ function reportReplayMarker(
 			formatRequestLogLine(prepared.requestKind, 'Failed to report replay marker'),
 			error,
 		);
+
+		if (current >= REPLAY_MARKER_FAILURE_WARN_THRESHOLD) {
+			// Show a one-time warning when replay markers consistently fail.
+			// The prompt cache hit rate depends on replay markers carrying
+			// reasoning_content across turns. Without them, DeepSeek's prefix
+			// cache is invalidated and costs increase ~50x.
+			const message = current === REPLAY_MARKER_FAILURE_WARN_THRESHOLD
+				? vscode.window.showWarningMessage(
+					'DeepSeek Copilot: Replay markers are failing. Prompt cache hit rate may degrade, leading to higher API costs. Check the "DeepSeek" output channel for details.',
+					'Show Logs',
+				)
+				: undefined;
+
+			if (message) {
+				void message.then((choice) => {
+					if (choice === 'Show Logs') {
+						logger.show();
+					}
+				});
+			}
+		}
 	}
 }
 
@@ -241,7 +273,15 @@ function handleToolCall(
 			toolCall.id,
 			error,
 		);
-		progress.report(new vscode.LanguageModelToolCallPart(toolCall.id, toolCall.function.name, {}));
+		// Inject a notice before the tool call so the user sees that the
+		// arguments were corrupted, rather than wondering why the tool failed
+		// with no explanation.
+		const reason = error instanceof Error ? error.message : String(error);
+		const notice = `\n\n> ⚠️ Tool call arguments for \`${toolCall.function.name}\` could not be parsed (${reason}). The tool was invoked with empty input.\n\n`;
+		progress.report(new vscode.LanguageModelTextPart(notice));
+		progress.report(
+			new vscode.LanguageModelToolCallPart(toolCall.id, toolCall.function.name, {}),
+		);
 	}
 }
 

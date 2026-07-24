@@ -134,8 +134,10 @@ export type CompatMode = 'auto' | 'always' | 'never';
  * These are computed once and cached; consumed by request builders.
  */
 export interface EndpointCompatibility {
-	/** Whether to send `thinking` / `reasoning_effort` params (DeepSeek-specific). */
+	/** Whether to send the `thinking` object param (DeepSeek-specific). */
 	sendThinkingParam: boolean;
+	/** Whether to send `reasoning_effort` param (DeepSeek-specific). */
+	sendReasoningEffort: boolean;
 	/** Whether to inject `reasoning_content` into assistant messages (DeepSeek-specific). */
 	sendReasoningContent: boolean;
 	/** Whether to send `stream_options: { include_usage: true }` (OpenAI extension). */

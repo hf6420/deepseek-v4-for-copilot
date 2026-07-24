@@ -36,7 +36,9 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 
 	constructor(context: vscode.ExtensionContext) {
 		this.authManager = new AuthManager(context);
-		this.engine = new DeepSeekChatProvider(context);
+		// Share the AuthManager with the engine to avoid duplicate
+		// SecretStorage listeners and cache invalidation.
+		this.engine = new DeepSeekChatProvider(context, this.authManager);
 
 		context.subscriptions.push(
 			this.onDidChangeEmitter,

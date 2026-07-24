@@ -82,7 +82,11 @@ export class BalanceCurrencyResolver {
 	async invalidate(): Promise<void> {
 		this.generation++;
 		this.controller?.abort();
-		await this.inFlight;
+		// Do not await the in-flight request — it has already been aborted
+		// above and will resolve on its own. Awaiting would block the model
+		// picker refresh for up to BALANCE_TIMEOUT_MS when the user rapidly
+		// switches API keys or base URLs.
+		this.inFlight = undefined;
 		this.resolved = undefined;
 		await this.context.globalState.update(CACHE_KEY, undefined);
 	}
