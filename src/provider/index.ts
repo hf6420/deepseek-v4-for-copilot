@@ -16,11 +16,13 @@ import { processToolFlow } from './tools/flow';
 import { createVisionService } from './vision';
 
 /**
- * DeepSeek Chat Provider — implements vscode.LanguageModelChatProvider so
- * DeepSeek V4 models appear directly in the Copilot Chat model picker.
+ * DeepSeek Chat Provider — internal engine that implements the full chat
+ * pipeline (vision proxy, tool flow, streaming). It is NOT directly registered
+ * as a vendor; the HFChatProvider (hf.ts) wraps it as the public API surface.
  */
 export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 	private readonly authManager: AuthManager;
+	private readonly context: vscode.ExtensionContext;
 	private readonly globalStorageUri: vscode.Uri;
 	private readonly onDidChangeLanguageModelChatInformationEmitter = new vscode.EventEmitter<void>();
 	private isActive = true;
@@ -35,6 +37,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 	private readonly balanceCurrencyResolver: BalanceCurrencyResolver;
 
 	constructor(context: vscode.ExtensionContext) {
+		this.context = context;
 		this.authManager = new AuthManager(context);
 		this.globalStorageUri = context.globalStorageUri;
 		this.vision = createVisionService(context);
@@ -98,23 +101,13 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		void this.balanceCurrencyResolver
 			.invalidate()
 			.catch((error) => logger.warn('Failed to invalidate DeepSeek balance currency', error))
-			.finally(() => this.onDidChangeLanguageModelChatInformationEmitter.fire());
+			.finally(() => {
+				this.onDidChangeLanguageModelChatInformationEmitter.fire();
+			});
 	}
 
 	async prepareForDeactivate(): Promise<void> {
 		this.isActive = false;
-		this.onDidChangeLanguageModelChatInformationEmitter.fire();
-
-		// Force the host to re-pull `provideLanguageModelChatInformation` synchronously
-		// before the extension unloads. With `isActive = false` we now return [],
-		// which makes Copilot Chat drop DeepSeek models from the picker immediately
-		// instead of leaving stale entries behind after deactivate. The returned
-		// model list itself is unused — we only call this for its side effect.
-		try {
-			await vscode.lm.selectChatModels({ vendor: 'deepseek' });
-		} catch (error) {
-			logger.warn('Failed to refresh DeepSeek models during deactivate', error);
-		}
 	}
 
 	async setVisionModel(): Promise<void> {
@@ -136,7 +129,16 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		if (hasKey) {
 			this.balanceCurrencyResolver.refreshInBackground();
 		}
+
+		// This method is retained for backward compatibility but is
+		// no longer called directly — the HF provider (hf.ts) handles
+		// model listing. It still serves as an internal fallback.
 		return MODELS.map((model) => toChatInfo(model, hasKey, pricingCurrency));
+	}
+
+	/** Expose balance currency for the HF provider's pricing display. */
+	getBalanceCurrency(): import('../types').PricingCurrency | undefined {
+		return this.balanceCurrencyResolver.getDisplayCurrency();
 	}
 
 	async provideLanguageModelChatResponse(
@@ -145,6 +147,21 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		options: vscode.ProvideLanguageModelChatResponseOptions,
 		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
 		token: vscode.CancellationToken,
+	): Promise<void> {
+		return this.provideLanguageModelChatResponseWithDef(
+			modelInfo, messages, options, progress, token, undefined,
+		);
+	}
+
+	async provideLanguageModelChatResponseWithDef(
+		modelInfo: vscode.LanguageModelChatInformation,
+		messages: readonly vscode.LanguageModelChatRequestMessage[],
+		options: vscode.ProvideLanguageModelChatResponseOptions,
+		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+		token: vscode.CancellationToken,
+		modelDefOverride?: import('../types').ModelDefinition,
+		effectiveBaseUrl?: string,
+		effectiveApiKey?: string,
 	): Promise<void> {
 		const segment = resolveConversationSegment(messages);
 		const requestKind = classifyProviderRequest({
@@ -176,6 +193,9 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			authManager: this.authManager,
 			globalStorageUri: this.globalStorageUri,
 			modelInfo,
+			modelDefOverride,
+			effectiveBaseUrl,
+			effectiveApiKey,
 			segment,
 			messages: toolFlow.messages,
 			options,

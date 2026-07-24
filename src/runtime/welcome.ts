@@ -1,10 +1,10 @@
 import vscode from 'vscode';
 import { WALKTHROUGH_ID, WELCOME_SHOWN_KEY } from '../consts';
-import { DeepSeekChatProvider } from '../provider';
+import { HFChatProvider } from '../provider/hf';
 
 export async function showWelcomeIfNeeded(
 	context: vscode.ExtensionContext,
-	provider: DeepSeekChatProvider,
+	provider: HFChatProvider,
 ): Promise<void> {
 	if (context.globalState.get<boolean>(WELCOME_SHOWN_KEY)) {
 		return;

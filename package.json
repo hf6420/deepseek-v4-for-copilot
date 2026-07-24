@@ -43,8 +43,148 @@
   "contributes": {
     "languageModelChatProviders": [
       {
-        "vendor": "deepseek",
-        "displayName": "DeepSeek"
+        "vendor": "hf",
+        "displayName": "HF",
+        "configuration": {
+          "type": "object",
+          "required": [
+            "apiKey"
+          ],
+          "properties": {
+            "apiKey": {
+              "type": "string",
+              "title": "API Key",
+              "description": "Default API key for all models. Each model can override with its own key.",
+              "secret": true,
+              "minLength": 1
+            },
+            "baseUrl": {
+              "type": "string",
+              "title": "Default API Base URL",
+              "description": "Defaults to https://api.deepseek.com. Each model can override with its own URL.",
+              "default": "https://api.deepseek.com"
+            },
+            "models": {
+              "type": "array",
+              "title": "Models",
+              "description": "Define your models here. Each entry appears in the Copilot Chat model picker.",
+              "defaultSnippets": [
+                {
+                  "label": "DeepSeek V4 Flash",
+                  "description": "Add DeepSeek V4 Flash (fast, general-purpose)",
+                  "body": [
+                    {
+                      "id": "deepseek-v4-flash",
+                      "name": "DeepSeek V4 Flash",
+                      "detail": "Fast, general-purpose model · 1M context",
+                      "maxInputTokens": 1000000,
+                      "maxOutputTokens": 393216,
+                      "toolCalling": true,
+                      "vision": false,
+                      "thinking": true,
+                      "requiresThinkingParam": true
+                    }
+                  ]
+                },
+                {
+                  "label": "DeepSeek V4 Pro",
+                  "description": "Add DeepSeek V4 Pro (most capable reasoning)",
+                  "body": [
+                    {
+                      "id": "deepseek-v4-pro",
+                      "name": "DeepSeek V4 Pro",
+                      "detail": "Most capable reasoning model · 1M context",
+                      "maxInputTokens": 1000000,
+                      "maxOutputTokens": 393216,
+                      "toolCalling": true,
+                      "vision": false,
+                      "thinking": true,
+                      "requiresThinkingParam": true
+                    }
+                  ]
+                },
+                {
+                  "label": "Custom Model",
+                  "description": "Add a custom/third-party model",
+                  "body": [
+                    {
+                      "id": "$1",
+                      "name": "$2",
+                      "url": "$3",
+                      "toolCalling": "^${4|true,false|}",
+                      "vision": "^${5|true,false|}",
+                      "thinking": "^${6|true,false|}",
+                      "maxInputTokens": "^${7:131072}",
+                      "maxOutputTokens": "^${8:16384}"
+                    }
+                  ]
+                }
+              ],
+              "items": {
+                "type": "object",
+                "required": [
+                  "id",
+                  "name"
+                ],
+                "properties": {
+                  "id": {
+                    "type": "string",
+                    "description": "Unique model ID shown in the picker."
+                  },
+                  "name": {
+                    "type": "string",
+                    "description": "Display name in the model picker."
+                  },
+                  "detail": {
+                    "type": "string",
+                    "description": "Short description shown below the model name."
+                  },
+                  "url": {
+                    "type": "string",
+                    "pattern": "^https?://.+",
+                    "patternErrorMessage": "Must start with http:// or https://",
+                    "description": "API base URL for this model. Overrides the default base URL above."
+                  },
+                  "apiKey": {
+                    "type": "string",
+                    "secret": true,
+                    "description": "Per-model API key. Overrides the default API key above."
+                  },
+                  "maxInputTokens": {
+                    "type": "number",
+                    "default": 131072,
+                    "description": "Maximum input tokens."
+                  },
+                  "maxOutputTokens": {
+                    "type": "number",
+                    "default": 16384,
+                    "description": "Maximum output tokens."
+                  },
+                  "toolCalling": {
+                    "type": "boolean",
+                    "default": true,
+                    "description": "Whether the model supports tool/function calling."
+                  },
+                  "vision": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether the model supports image input (vision)."
+                  },
+                  "thinking": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether the model supports thinking/reasoning mode."
+                  },
+                  "requiresThinkingParam": {
+                    "type": "boolean",
+                    "default": false,
+                    "description": "Whether to send `thinking` / `reasoning_effort` params (DeepSeek-specific)."
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     ],
     "commands": [
@@ -148,7 +288,7 @@
             "deepseek-v4-pro": "deepseek-v4-pro"
           },
           "description": "%deepseek-copilot.config.modelIdOverrides.description%",
-          "additionalProperties": false,
+          "additionalProperties": true,
           "properties": {
             "deepseek-v4-flash": {
               "type": "string",

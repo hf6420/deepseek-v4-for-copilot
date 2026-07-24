@@ -5,7 +5,7 @@ import { getApiModelId, getBaseUrl, getMaxTokens } from '../config';
 import { MODELS } from '../consts';
 import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { t } from '../i18n';
-import type { DeepSeekRequest } from '../types';
+import type { DeepSeekRequest, ModelDefinition } from '../types';
 import { getEndpointCompatibility } from './compat';
 import { convertMessages, countMessageChars } from './convert';
 import {
@@ -38,6 +38,12 @@ export interface PrepareChatRequestOptions {
 	authManager: AuthManager;
 	globalStorageUri: vscode.Uri;
 	modelInfo: vscode.LanguageModelChatInformation;
+	/** Optional model definition from vendor configuration (JSON array). */
+	modelDefOverride?: ModelDefinition;
+	/** Per-model base URL override (from vendor config). */
+	effectiveBaseUrl?: string;
+	/** Per-model API key override (from vendor config). */
+	effectiveApiKey?: string;
 	segment: ConversationSegment;
 	messages: readonly vscode.LanguageModelChatRequestMessage[];
 	options: vscode.ProvideLanguageModelChatResponseOptions;
@@ -50,6 +56,9 @@ export async function prepareChatRequest({
 	authManager,
 	globalStorageUri,
 	modelInfo,
+	modelDefOverride,
+	effectiveBaseUrl,
+	effectiveApiKey,
 	segment,
 	messages,
 	options,
@@ -57,14 +66,22 @@ export async function prepareChatRequest({
 	cacheDiagnostics,
 	getVisionDescriber,
 }: PrepareChatRequestOptions): Promise<PreparedChatRequest> {
-	const apiKey = await authManager.getApiKey();
-	if (!apiKey) {
+	// Resolve effective API key, base URL, and model ID.
+	// Per-model config takes priority, falling back to global settings.
+	const resolvedApiKey = effectiveApiKey || await authManager.getApiKey();
+	if (!resolvedApiKey) {
 		throw new Error(t('auth.notConfigured'));
 	}
 
-	const baseUrl = getBaseUrl();
-	const client = new DeepSeekClient(baseUrl, apiKey);
-	const modelDef = MODELS.find((m) => m.id === modelInfo.id);
+	const resolvedBaseUrl = effectiveBaseUrl || getBaseUrl();
+	const resolvedApiModelId = getApiModelId(modelInfo.id);
+
+	const client = new DeepSeekClient(resolvedBaseUrl, resolvedApiKey);
+
+	// Resolve model definition: vendor config → built-in
+	const modelDef: ModelDefinition | undefined =
+		modelDefOverride ?? MODELS.find((m) => m.id === modelInfo.id);
+
 	const isThinkingModel = modelDef?.capabilities.thinking ?? false;
 	const maxTokens = getMaxTokens();
 
@@ -73,10 +90,10 @@ export async function prepareChatRequest({
 	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel);
 	const tools = prepareRequestTools(modelDef?.capabilities.toolCalling, options);
 
-	const compat = getEndpointCompatibility(baseUrl);
+	const compat = getEndpointCompatibility(resolvedBaseUrl);
 	const totalRequestChars = countMessageChars(deepseekMessages);
 	const baseRequest: DeepSeekRequest = {
-		model: getApiModelId(modelInfo.id),
+		model: resolvedApiModelId,
 		messages: deepseekMessages,
 		stream: true,
 		tools,
@@ -95,7 +112,7 @@ export async function prepareChatRequest({
 	// Only force helper requests into disabled thinking on the official API.
 	// Custom endpoints keep their configured effort to preserve pre-#137 request shape.
 	const forceNoneThinking =
-		shouldForceThinkingNone(requestKind) && isOfficialDeepSeekBaseUrl(baseUrl);
+		shouldForceThinkingNone(requestKind) && isOfficialDeepSeekBaseUrl(resolvedBaseUrl);
 	const thinkingEffort = forceNoneThinking ? 'none' : configuredThinkingEffort;
 	const request: DeepSeekRequest = {
 		...baseRequest,
