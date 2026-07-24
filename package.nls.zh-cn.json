@@ -14,7 +14,7 @@
   "deepseek-copilot.walkthrough.showModels.description": "如果模型被隐藏，打开 VS Code 的语言模型管理器并显示 DeepSeek 模型。\n[打开语言模型管理](command:workbench.action.chat.manage)",
   "deepseek-copilot.walkthrough.advancedSettings.title": "尝试高级设置",
   "deepseek-copilot.walkthrough.advancedSettings.description": "可以在插件设置中自定义提供方与模型名称、自定义视觉代理、开启实验性设置等。\n[打开设置](command:deepseek-copilot.openSettings)",
-  "deepseek-copilot.config.title": "DeepSeek 助手",
+  "deepseek-copilot.config.title": "HF 助手",
   "deepseek-copilot.config.apiKey.description": "从 [platform.deepseek.com](https://platform.deepseek.com) 获取的 DeepSeek API Key。默认通过 SecretStorage 安全存储；在此设置会将 Key 以明文写入 `settings.json`。推荐使用 [设置 API Key](command:deepseek-copilot.setApiKey) 命令进行安全存储。",
   "deepseek-copilot.config.baseUrl.description": "DeepSeek API 基础 URL，默认为官方 DeepSeek API 端点。",
   "deepseek-copilot.config.maxTokens.description": "每次请求的最大输出 Token 数，设为 0 则不限制，可用于控制成本。",

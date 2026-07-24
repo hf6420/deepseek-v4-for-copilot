@@ -1,14 +1,14 @@
 {
-  "name": "deepseek-v4-for-copilot",
-  "displayName": "DeepSeek V4 for Copilot Chat",
+  "name": "HF",
+  "displayName": "HF",
   "description": "Pick DeepSeek V4 Pro & Flash from the Copilot Chat model picker. Vision, thinking mode, agent tools — zero config, BYOK.",
   "icon": "resources/icon.png",
-  "version": "0.6.2",
-  "publisher": "Vizards",
+  "version": "6.6.6",
+  "publisher": "HF",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Vizards/deepseek-v4-for-copilot"
+    "url": "https://github.com/hf6420/deepseek-v4-for-copilot"
   },
   "engines": {
     "vscode": "^1.116.0",
@@ -80,7 +80,7 @@
                       "maxInputTokens": 1000000,
                       "maxOutputTokens": 393216,
                       "toolCalling": true,
-                      "vision": false,
+                      "vision": true,
                       "thinking": true,
                       "requiresThinkingParam": true
                     }
@@ -97,7 +97,7 @@
                       "maxInputTokens": 1000000,
                       "maxOutputTokens": 393216,
                       "toolCalling": true,
-                      "vision": false,
+                      "vision": true,
                       "thinking": true,
                       "requiresThinkingParam": true
                     }
@@ -256,23 +256,6 @@
     "configuration": {
       "title": "%deepseek-copilot.config.title%",
       "properties": {
-        "deepseek-copilot.baseUrl": {
-          "type": "string",
-          "default": "https://api.deepseek.com",
-          "description": "%deepseek-copilot.config.baseUrl.description%"
-        },
-        "deepseek-copilot.apiKey": {
-          "type": "string",
-          "default": "",
-          "editPresentation": "password",
-          "markdownDescription": "%deepseek-copilot.config.apiKey.description%"
-        },
-        "deepseek-copilot.maxTokens": {
-          "type": "number",
-          "default": 0,
-          "minimum": 0,
-          "description": "%deepseek-copilot.config.maxTokens.description%"
-        },
         "deepseek-copilot.experimental.stabilizeToolList": {
           "type": "boolean",
           "default": true,
@@ -280,25 +263,6 @@
           "tags": [
             "experimental"
           ]
-        },
-        "deepseek-copilot.modelIdOverrides": {
-          "type": "object",
-          "default": {
-            "deepseek-v4-flash": "deepseek-v4-flash",
-            "deepseek-v4-pro": "deepseek-v4-pro"
-          },
-          "description": "%deepseek-copilot.config.modelIdOverrides.description%",
-          "additionalProperties": true,
-          "properties": {
-            "deepseek-v4-flash": {
-              "type": "string",
-              "description": "%deepseek-copilot.config.modelIdOverrides.deepseek-v4-flash.description%"
-            },
-            "deepseek-v4-pro": {
-              "type": "string",
-              "description": "%deepseek-copilot.config.modelIdOverrides.deepseek-v4-pro.description%"
-            }
-          }
         },
         "deepseek-copilot.visionModel": {
           "type": "string",

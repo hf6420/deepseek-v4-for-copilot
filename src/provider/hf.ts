@@ -1,9 +1,9 @@
 import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { t } from '../i18n';
-import { toChatInfo } from './models';
 import type { ModelDefinition } from '../types';
 import { DeepSeekChatProvider } from './index';
+import { toChatInfo } from './models';
 
 interface VendorModelConfig {
 	id: string;
