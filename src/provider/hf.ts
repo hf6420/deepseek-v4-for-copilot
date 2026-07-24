@@ -116,16 +116,25 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 		};
 		const cfg = opts.configuration;
 
-		// Persist global API key / base URL.
+		// Persist the FIRST configured API key and base URL as global
+		// defaults. Per-model configs take priority at request time.
 		const configuredApiKey = typeof cfg?.apiKey === 'string' ? (cfg.apiKey as string).trim() : '';
-		const configuredBaseUrl = typeof cfg?.baseUrl === 'string' ? (cfg.baseUrl as string).trim() : '';
+		const vendorBaseUrl = typeof cfg?.baseUrl === 'string' ? (cfg.baseUrl as string).trim() : '';
+
+		// Global defaults: only set when not already configured.
 		if (configuredApiKey) {
-			try { await this.authManager.setApiKey(configuredApiKey); } catch { /* ok */ }
+			try {
+				const hasExisting = await this.authManager.hasApiKey();
+				if (!hasExisting) { await this.authManager.setApiKey(configuredApiKey); }
+			} catch { /* ok */ }
 		}
-		if (configuredBaseUrl) {
+		if (vendorBaseUrl) {
 			try {
 				const dsCfg = vscode.workspace.getConfiguration('deepseek-copilot');
-				await dsCfg.update('baseUrl', configuredBaseUrl, vscode.ConfigurationTarget.Global);
+				const existing = dsCfg.get<string>('baseUrl');
+				if (!existing || existing === 'https://api.deepseek.com') {
+					await dsCfg.update('baseUrl', vendorBaseUrl, vscode.ConfigurationTarget.Global);
+				}
 			} catch { /* ok */ }
 		}
 
@@ -140,8 +149,10 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 						id: m.id as string,
 						name: m.name as string,
 						detail: typeof m.detail === 'string' ? m.detail as string : undefined,
-						url: typeof m.url === 'string' ? m.url as string : undefined,
-						apiKey: typeof m.apiKey === 'string' ? m.apiKey as string : undefined,
+						// per-model url wins; fall back to vendor-level baseUrl.
+						url: typeof m.url === 'string' ? m.url as string : (vendorBaseUrl || undefined),
+						// per-model apiKey wins; fall back to vendor-level apiKey.
+						apiKey: typeof m.apiKey === 'string' ? m.apiKey as string : (configuredApiKey || undefined),
 						maxInputTokens: typeof m.maxInputTokens === 'number' ? m.maxInputTokens as number : undefined,
 						maxOutputTokens: typeof m.maxOutputTokens === 'number' ? m.maxOutputTokens as number : undefined,
 						toolCalling: typeof m.toolCalling === 'boolean' ? m.toolCalling as boolean : undefined,
@@ -157,9 +168,9 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 		const hasAnyModelKey = configs.some((c) => c.apiKey?.trim());
 		const hasKey = hasGlobalKey || hasAnyModelKey;
 
-		// Build ModelDefinitions and cache configs for request-time lookup.
+		// Build ModelDefinitions and merge into cache for request-time lookup.
+		// Never clear — each group contributes its own models.
 		const defs: ModelDefinition[] = [];
-		this.vendorConfigs.clear();
 		for (const c of configs) {
 			const def = this.toDefinition(c);
 			defs.push(def);

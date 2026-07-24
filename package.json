@@ -71,7 +71,7 @@
               "defaultSnippets": [
                 {
                   "label": "DeepSeek V4 Flash",
-                  "description": "Add DeepSeek V4 Flash (fast, general-purpose)",
+                  "description": "Official DeepSeek API — uses vendor-level baseUrl",
                   "body": [
                     {
                       "id": "deepseek-v4-flash",
@@ -88,7 +88,7 @@
                 },
                 {
                   "label": "DeepSeek V4 Pro",
-                  "description": "Add DeepSeek V4 Pro (most capable reasoning)",
+                  "description": "Official DeepSeek API — uses vendor-level baseUrl",
                   "body": [
                     {
                       "id": "deepseek-v4-pro",
@@ -104,18 +104,34 @@
                   ]
                 },
                 {
-                  "label": "Custom Model",
-                  "description": "Add a custom/third-party model",
+                  "label": "Third-Party Model (with custom URL)",
+                  "description": "Use a model from HuggingFace, OpenAI, Ollama, etc.",
                   "body": [
                     {
                       "id": "$1",
                       "name": "$2",
                       "url": "$3",
-                      "toolCalling": "^${4|true,false|}",
-                      "vision": "^${5|true,false|}",
-                      "thinking": "^${6|true,false|}",
-                      "maxInputTokens": "^${7:131072}",
-                      "maxOutputTokens": "^${8:16384}"
+                      "apiKey": "$4",
+                      "maxInputTokens": "^${5:131072}",
+                      "maxOutputTokens": "^${6:16384}",
+                      "toolCalling": "^${7|true,false|}",
+                      "vision": "^${8|true,false|}",
+                      "thinking": "^${9|true,false|}"
+                    }
+                  ]
+                },
+                {
+                  "label": "Third-Party Model (inherits vendor baseUrl)",
+                  "description": "Uses the baseUrl configured at vendor level",
+                  "body": [
+                    {
+                      "id": "$1",
+                      "name": "$2",
+                      "maxInputTokens": "^${3:131072}",
+                      "maxOutputTokens": "^${4:16384}",
+                      "toolCalling": "^${5|true,false|}",
+                      "vision": "^${6|true,false|}",
+                      "thinking": "^${7|true,false|}"
                     }
                   ]
                 }
