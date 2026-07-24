@@ -4,20 +4,20 @@ import { safeStringify } from '../json';
 import { logger } from '../logger';
 import { getEndpointCompatibility, learnFromError, recordRequestSuccess } from '../provider/compat';
 import type {
-    DeepSeekRequest,
-    DeepSeekStreamChunk,
-    DeepSeekToolCall,
-    DeepSeekUsage,
-    StreamCallbacks,
+	DeepSeekRequest,
+	DeepSeekStreamChunk,
+	DeepSeekToolCall,
+	DeepSeekUsage,
+	StreamCallbacks,
 } from '../types';
 import {
-    createHttpError,
-    DeepSeekRequestError,
-    formatRequestError,
-    normalizeRequestError,
+	createHttpError,
+	DeepSeekRequestError,
+	formatRequestError,
+	normalizeRequestError,
 } from './error';
 
-const REQUEST_TIMEOUT_MS = 180_000;
+const REQUEST_TIMEOUT_MS = 600_000;
 const MAX_CONNECT_RETRIES = 3;
 const BASE_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
@@ -106,6 +106,7 @@ export class DeepSeekClient {
 	 */
 	async streamChatCompletion(
 		request: DeepSeekRequest,
+		extraBody: Record<string, unknown> | undefined,
 		callbacks: StreamCallbacks,
 		cancellationToken?: CancellationToken,
 	): Promise<void> {
@@ -138,7 +139,7 @@ export class DeepSeekClient {
 			}
 
 			try {
-				await this._performStreamRequest(request, callbacks, cancellationToken);
+				await this._performStreamRequest(request, extraBody, callbacks, cancellationToken);
 				circuitBreakerRecordSuccess(this.baseUrl);
 				return;
 			} catch (error) {
@@ -185,6 +186,7 @@ export class DeepSeekClient {
 	 */
 	private async _performStreamRequest(
 		request: DeepSeekRequest,
+		extraBody: Record<string, unknown> | undefined,
 		callbacks: StreamCallbacks,
 		cancellationToken?: CancellationToken,
 	): Promise<void> {
@@ -196,7 +198,11 @@ export class DeepSeekClient {
 			controller.abort();
 		}
 
-		const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+		let timedOut = false;
+		const timeout = setTimeout(() => {
+			timedOut = true;
+			controller.abort();
+		}, REQUEST_TIMEOUT_MS);
 
 		try {
 			// Inner loop: retry at most once after adaptive capability learning.
@@ -206,8 +212,16 @@ export class DeepSeekClient {
 			// retries the fetch without user intervention.
 			for (let compatRetry = 0; compatRetry < 2; compatRetry++) {
 				const compat = getEndpointCompatibility(this.baseUrl);
-				const requestBody: Record<string, unknown> = { ...request };
-				if (compat.sendStreamOptions) {
+				// Merge request fields first, then extraBody on top so user
+				// overrides always win. Strip model + messages from extraBody
+				// since those are set by the extension and must not be changed.
+				const safeExtraBody = extraBody ? { ...extraBody } : undefined;
+				if (safeExtraBody) {
+					delete safeExtraBody.model;
+					delete safeExtraBody.messages;
+				}
+				const requestBody: Record<string, unknown> = { ...request, ...safeExtraBody };
+				if (compat.sendStreamOptions && requestBody.stream !== false) {
 					requestBody.stream_options = { include_usage: true };
 				}
 
@@ -222,9 +236,12 @@ export class DeepSeekClient {
 				});
 
 				if (response.ok) {
-				recordRequestSuccess(this.baseUrl);
-				return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
-			}
+					recordRequestSuccess(this.baseUrl);
+					if (requestBody.stream === false) {
+						return await this._processNonStreamResponse(response, callbacks);
+					}
+					return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
+				}
 
 				// Adaptive learning: on 400 / 422 errors from non-official endpoints,
 				// to infer unsupported fields from the error message and retry once
@@ -254,10 +271,72 @@ export class DeepSeekClient {
 			// Should be unreachable — the loop always either returns, continues,
 			// or throws. Fallback just in case.
 			throw new Error('Unexpected: compat retry loop exhausted');
+		} catch (error) {
+			if (timedOut) {
+				throw new DeepSeekRequestError({
+					message: `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s for ${this.baseUrl}`,
+					userSummary: `DeepSeek API request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds. The model may be processing a large request. Please try again or reduce the input size.`,
+					kind: 'network',
+					baseUrl: this.baseUrl,
+					code: 'TIMEOUT',
+				});
+			}
+			throw error;
 		} finally {
 			cancelListener?.dispose();
 			clearTimeout(timeout);
 		}
+	}
+
+	/**
+	 * Process a non-streaming (plain JSON) response body.
+	 * Used when extraBody sets stream: false for APIs that don't support SSE.
+	 */
+	private async _processNonStreamResponse(
+		response: Response,
+		callbacks: StreamCallbacks,
+	): Promise<void> {
+		const data: unknown = await response.json();
+		if (!data || typeof data !== 'object') {
+			callbacks.onDone();
+			return;
+		}
+
+		const obj = data as Record<string, unknown>;
+		const choice = (obj.choices as Array<Record<string, unknown>>)?.[0];
+		if (!choice) {
+			callbacks.onDone();
+			return;
+		}
+
+		const message = choice.message as Record<string, unknown> | undefined;
+
+		// Reasoning / thinking content
+		const reasoning = message?.reasoning_content;
+		if (typeof reasoning === 'string' && reasoning.length > 0) {
+			callbacks.onThinking(reasoning);
+		}
+
+		// Regular content
+		const content = message?.content;
+		if (typeof content === 'string' && content.length > 0) {
+			callbacks.onContent(content);
+		}
+
+		// Tool calls
+		const toolCalls = message?.tool_calls;
+		if (Array.isArray(toolCalls)) {
+			for (const tc of toolCalls) {
+				callbacks.onToolCall(tc as import('../types').DeepSeekToolCall);
+			}
+		}
+
+		// Usage
+		if (obj.usage) {
+			callbacks.onUsage?.(obj.usage as import('../types').DeepSeekUsage);
+		}
+
+		callbacks.onDone();
 	}
 
 	/**

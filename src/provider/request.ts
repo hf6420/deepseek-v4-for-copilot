@@ -23,6 +23,8 @@ import { resolveImageMessages, type VisionDescriber } from './vision';
 export interface PreparedChatRequest {
 	client: DeepSeekClient;
 	request: DeepSeekRequest;
+	/** Extra body fields merged into the API request body (from vendor model config). */
+	extraBody?: Record<string, unknown>;
 	isThinkingModel: boolean;
 	totalRequestChars: number;
 	trailingToolResultIds: string[];
@@ -44,6 +46,8 @@ export interface PrepareChatRequestOptions {
 	effectiveBaseUrl?: string;
 	/** Per-model API key override (from vendor config). */
 	effectiveApiKey?: string;
+	/** Per-model extra body fields to merge into the API request (from vendor config). */
+	effectiveExtraBody?: Record<string, unknown>;
 	segment: ConversationSegment;
 	messages: readonly vscode.LanguageModelChatRequestMessage[];
 	options: vscode.ProvideLanguageModelChatResponseOptions;
@@ -59,6 +63,7 @@ export async function prepareChatRequest({
 	modelDefOverride,
 	effectiveBaseUrl,
 	effectiveApiKey,
+	effectiveExtraBody,
 	segment,
 	messages,
 	options,
@@ -161,6 +166,7 @@ export async function prepareChatRequest({
 	return {
 		client,
 		request,
+		extraBody: effectiveExtraBody,
 		isThinkingModel,
 		totalRequestChars,
 		trailingToolResultIds: collectTrailingToolResultIds(deepseekMessages),

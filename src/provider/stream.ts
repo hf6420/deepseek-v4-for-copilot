@@ -3,14 +3,14 @@ import { createUserFacingError } from '../client';
 import { logger } from '../logger';
 import type { DeepSeekToolCall, DeepSeekUsage } from '../types';
 import {
-	observeCancellationToken,
-	type CacheDiagnosticsRun,
-	type ReplayMarkerReportTrigger,
+    observeCancellationToken,
+    type CacheDiagnosticsRun,
+    type ReplayMarkerReportTrigger,
 } from './debug';
 import {
-	createReplayMarkerPart,
-	hasReplayMarkerMetadata,
-	type ReplayMarkerMetadata,
+    createReplayMarkerPart,
+    hasReplayMarkerMetadata,
+    type ReplayMarkerMetadata,
 } from './replay';
 import type { PreparedChatRequest } from './request';
 import { formatRequestLogLine, type RequestKind } from './routing';
@@ -58,6 +58,7 @@ export function streamChatCompletion({
 	return prepared.client
 		.streamChatCompletion(
 			prepared.request,
+			prepared.extraBody,
 			{
 				onContent: (content: string) => {
 					reportInitialResponseNoticeOnce(progress, state, initialResponseNotice);

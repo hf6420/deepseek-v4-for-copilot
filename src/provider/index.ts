@@ -182,6 +182,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		modelDefOverride?: import('../types').ModelDefinition,
 		effectiveBaseUrl?: string,
 		effectiveApiKey?: string,
+		effectiveExtraBody?: Record<string, unknown>,
 	): Promise<void> {
 		const segment = resolveConversationSegment(messages);
 		const requestKind = classifyProviderRequest({
@@ -216,6 +217,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			modelDefOverride,
 			effectiveBaseUrl,
 			effectiveApiKey,
+			effectiveExtraBody,
 			segment,
 			messages: toolFlow.messages,
 			options,
