@@ -1,4 +1,5 @@
 import type { CancellationToken } from 'vscode';
+import { normalizeBaseUrl } from '../endpoint';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import { getEndpointCompatibility } from '../provider/compat';
@@ -215,7 +216,14 @@ export class DeepSeekClient {
 				requestBody.stream_options = { include_usage: true };
 			}
 
-			const response = await fetch(`${this.baseUrl}/chat/completions`, {
+			// Resolve the chat completions endpoint via URL constructor so that
+			// a baseUrl already containing a path prefix (e.g. /v1) or even the
+			// full /chat/completions path doesn't produce a double-path URL.
+			const endpoint = new URL(normalizeBaseUrl(this.baseUrl));
+			if (!endpoint.pathname.endsWith('/chat/completions')) {
+				endpoint.pathname = endpoint.pathname.replace(/\/?$/, '') + '/chat/completions';
+			}
+			const response = await fetch(endpoint.toString(), {
 				method: 'POST',
 				headers: {
 					'Content-Type': 'application/json',
