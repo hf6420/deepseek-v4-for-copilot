@@ -1,8 +1,7 @@
 import type { CancellationToken } from 'vscode';
-import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
-import { getEndpointCompatibility, learnFromError, recordRequestSuccess } from '../provider/compat';
+import { getEndpointCompatibility } from '../provider/compat';
 import type {
     DeepSeekRequest,
     DeepSeekStreamChunk,
@@ -179,10 +178,7 @@ export class DeepSeekClient {
 
 	/**
 	 * Execute a single streaming request attempt.
-	 * Automatically retries once after adaptive compatibility learning
-	 * (when learnFromError disables an unsupported field for a third-party
-	 * endpoint). Throws on unrecoverable failure — outer retry loop handles
-	 * transient connection errors.
+	 * Throws on failure — outer retry loop handles transient connection errors.
 	 */
 	private async _performStreamRequest(
 		request: DeepSeekRequest,
@@ -205,72 +201,39 @@ export class DeepSeekClient {
 		}, REQUEST_TIMEOUT_MS);
 
 		try {
-			// Inner loop: retry at most once after adaptive capability learning.
-			// The first iteration sends the request with current compatibility.
-			// If a 400 error triggers learnFromError and capabilities change,
-			// the second iteration rebuilds the body with updated compat and
-			// retries the fetch without user intervention.
-			for (let compatRetry = 0; compatRetry < 2; compatRetry++) {
-				const compat = getEndpointCompatibility(this.baseUrl);
-				// Merge request fields first, then extraBody on top so user
-				// overrides always win. Strip model + messages from extraBody
-				// since those are set by the extension and must not be changed.
-				const safeExtraBody = extraBody ? { ...extraBody } : undefined;
-				if (safeExtraBody) {
-					delete safeExtraBody.model;
-					delete safeExtraBody.messages;
-				}
-				const requestBody: Record<string, unknown> = { ...request, ...safeExtraBody };
-				if (compat.sendStreamOptions && requestBody.stream !== false) {
-					requestBody.stream_options = { include_usage: true };
-				}
-
-				const response = await fetch(`${this.baseUrl}/chat/completions`, {
-					method: 'POST',
-					headers: {
-						'Content-Type': 'application/json',
-						Authorization: `Bearer ${this.apiKey}`,
-					},
-					body: safeStringify(requestBody),
-					signal: controller.signal,
-				});
-
-				if (response.ok) {
-					recordRequestSuccess(this.baseUrl);
-					if (requestBody.stream === false) {
-						return await this._processNonStreamResponse(response, callbacks);
-					}
-					return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
-				}
-
-				// Adaptive learning: on 400 / 422 errors from non-official endpoints,
-				// to infer unsupported fields from the error message and retry once
-				// with the corrected compatibility.
-				if (
-					compatRetry === 0 &&
-					(response.status === 400 || response.status === 422) &&
-					!isOfficialDeepSeekBaseUrl(this.baseUrl)
-				) {
-					try {
-						const errorText = await response.clone().text();
-						const learned = learnFromError(this.baseUrl, errorText);
-						if (learned) {
-							logger.info(
-								`[compat] Compatibility updated for ${this.baseUrl} — retrying request with corrected fields`,
-							);
-							continue; // Retry with updated compat
-						}
-					} catch {
-						// Best-effort learning — fall through to throw below.
-					}
-				}
-
-				throw await createHttpError(response, { baseUrl: this.baseUrl, request: requestBody as unknown as import('../types').DeepSeekRequest });
+			const compat = getEndpointCompatibility(this.baseUrl);
+			// Merge request fields first, then extraBody on top so user
+			// overrides always win. Strip model + messages from extraBody
+			// since those are set by the extension and must not be changed.
+			const safeExtraBody = extraBody ? { ...extraBody } : undefined;
+			if (safeExtraBody) {
+				delete safeExtraBody.model;
+				delete safeExtraBody.messages;
+			}
+			const requestBody: Record<string, unknown> = { ...request, ...safeExtraBody };
+			if (compat.sendStreamOptions && requestBody.stream !== false) {
+				requestBody.stream_options = { include_usage: true };
 			}
 
-			// Should be unreachable — the loop always either returns, continues,
-			// or throws. Fallback just in case.
-			throw new Error('Unexpected: compat retry loop exhausted');
+			const response = await fetch(`${this.baseUrl}/chat/completions`, {
+				method: 'POST',
+				headers: {
+					'Content-Type': 'application/json',
+					Authorization: `Bearer ${this.apiKey}`,
+				},
+				body: safeStringify(requestBody),
+				signal: controller.signal,
+			});
+
+			if (response.ok) {
+				circuitBreakerRecordSuccess(this.baseUrl);
+				if (requestBody.stream === false) {
+					return await this._processNonStreamResponse(response, callbacks);
+				}
+				return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
+			}
+
+			throw await createHttpError(response, { baseUrl: this.baseUrl, request: requestBody as unknown as import('../types').DeepSeekRequest });
 		} catch (error) {
 			if (timedOut) {
 				throw new DeepSeekRequestError({

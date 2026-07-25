@@ -18,6 +18,7 @@ interface VendorModelConfig {
 	thinking?: boolean;
 	requiresThinkingParam?: boolean;
 	extraBody?: Record<string, unknown>;
+	toolChoice?: boolean;
 }
 
 /**
@@ -163,6 +164,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 						thinking: typeof m.thinking === 'boolean' ? m.thinking as boolean : undefined,
 						requiresThinkingParam: typeof m.requiresThinkingParam === 'boolean' ? m.requiresThinkingParam as boolean : undefined,
 						extraBody: typeof m.extraBody === 'object' && m.extraBody !== null && !Array.isArray(m.extraBody) ? m.extraBody as Record<string, unknown> : undefined,
+						toolChoice: typeof m.toolChoice === 'boolean' ? m.toolChoice as boolean : undefined,
 					});
 				}
 			}
@@ -202,6 +204,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 			cfg?.url?.trim() || undefined,
 			cfg?.apiKey?.trim() || undefined,
 			cfg?.extraBody,
+			cfg?.toolChoice,
 		);
 	}
 

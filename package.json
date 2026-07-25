@@ -74,8 +74,8 @@
                   "description": "Official DeepSeek API — uses vendor-level baseUrl",
                   "body": [
                     {
-                      "id": "deepseek-v4-flash",
-                      "name": "DeepSeek V4 Flash",
+                      "id": "model-id",
+                      "name": "model-name",
                       "detail": "Fast, general-purpose model · 1M context",
                       "maxInputTokens": 1000000,
                       "maxOutputTokens": 393216,
@@ -83,58 +83,7 @@
                       "vision": true,
                       "thinking": true,
                       "requiresThinkingParam": true,
-                      "extraBody": {}
-                    }
-                  ]
-                },
-                {
-                  "label": "DeepSeek V4 Pro",
-                  "description": "Official DeepSeek API — uses vendor-level baseUrl",
-                  "body": [
-                    {
-                      "id": "deepseek-v4-pro",
-                      "name": "DeepSeek V4 Pro",
-                      "detail": "Most capable reasoning model · 1M context",
-                      "maxInputTokens": 1000000,
-                      "maxOutputTokens": 393216,
-                      "toolCalling": true,
-                      "vision": true,
-                      "thinking": true,
-                      "requiresThinkingParam": true,
-                      "extraBody": {}
-                    }
-                  ]
-                },
-                {
-                  "label": "Third-Party Model (with custom URL)",
-                  "description": "Use a model from HuggingFace, OpenAI, Ollama, etc.",
-                  "body": [
-                    {
-                      "id": "$1",
-                      "name": "$2",
-                      "url": "$3",
-                      "apiKey": "$4",
-                      "maxInputTokens": "^${5:131072}",
-                      "maxOutputTokens": "^${6:16384}",
-                      "toolCalling": "^${7|true,false|}",
-                      "vision": "^${8|true,false|}",
-                      "thinking": "^${9|true,false|}",
-                      "extraBody": {}
-                    }
-                  ]
-                },
-                {
-                  "label": "Third-Party Model (inherits vendor baseUrl)",
-                  "description": "Uses the baseUrl configured at vendor level",
-                  "body": [
-                    {
-                      "id": "$1",
-                      "name": "$2",
-                      "maxInputTokens": "^${3:131072}",
-                      "maxOutputTokens": "^${4:16384}",
-                      "toolCalling": "^${5|true,false|}",
-                      "vision": "^${6|true,false|}",
-                      "thinking": "^${7|true,false|}",
+                      "toolChoice": true,
                       "extraBody": {}
                     }
                   ]
@@ -203,6 +152,10 @@
                   "extraBody": {
                     "type": "object",
                     "description": "Extra JSON fields to merge into the API request body. These fields override the extension's defaults — use this to customize parameters for third-party APIs (e.g. set stream: false, adjust temperature, add custom fields). Only model and messages are protected and cannot be overridden."
+                  },
+                  "toolChoice": {
+                    "type": "boolean",
+                    "description": "Per-model override for sending `tool_choice: \"auto\"`. Takes priority over the global `deepseek-copilot.compat.toolChoice` setting. Set to false if this model's endpoint rejects tool_choice."
                   }
                 }
               }

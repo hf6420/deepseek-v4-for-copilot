@@ -48,6 +48,9 @@ export interface PrepareChatRequestOptions {
 	effectiveApiKey?: string;
 	/** Per-model extra body fields to merge into the API request (from vendor config). */
 	effectiveExtraBody?: Record<string, unknown>;
+	/** Per-model toolChoice override (from vendor config). Takes priority over the
+	 * global `deepseek-copilot.compat.toolChoice` setting. */
+	effectiveToolChoice?: boolean;
 	segment: ConversationSegment;
 	messages: readonly vscode.LanguageModelChatRequestMessage[];
 	options: vscode.ProvideLanguageModelChatResponseOptions;
@@ -64,6 +67,7 @@ export async function prepareChatRequest({
 	effectiveBaseUrl,
 	effectiveApiKey,
 	effectiveExtraBody,
+	effectiveToolChoice,
 	segment,
 	messages,
 	options,
@@ -97,12 +101,13 @@ export async function prepareChatRequest({
 
 	const compat = getEndpointCompatibility(resolvedBaseUrl);
 	const totalRequestChars = countMessageChars(deepseekMessages);
+	const sendToolChoice = effectiveToolChoice ?? compat.sendToolChoice;
 	const baseRequest: DeepSeekRequest = {
 		model: resolvedApiModelId,
 		messages: deepseekMessages,
 		stream: true,
 		tools,
-		tool_choice: compat.sendToolChoice && tools && tools.length > 0 ? ('auto' as const) : undefined,
+		tool_choice: sendToolChoice && tools && tools.length > 0 ? ('auto' as const) : undefined,
 		max_tokens: maxTokens,
 		...(compat.temperature ? { temperature: compat.temperature } : {}),
 		...(compat.topP ? { top_p: compat.topP } : {}),
