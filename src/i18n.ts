@@ -193,7 +193,7 @@ const zh: Translations = {
 	'error.network.configuration': '[{0}] 请求配置无效。请检查自定义 baseUrl 或扩展设置。',
 	'error.network.generic':
 		'[{0}] 网络请求失败。请检查网络连接、防火墙或代理设置，以及自定义 baseUrl。',
-	'error.unknown': 'DeepSeek 请求失败：{0}',
+	'error.unknown': 'HF 请求失败：{0}',
 
 	// Extension
 	'extension.activateFailed': 'DeepSeek 激活失败，请运行 "DeepSeek: 显示日志" 查看详情。',
@@ -411,7 +411,7 @@ const en: Translations = {
 		'[{0}] The request configuration is invalid. Check your custom baseUrl or extension settings.',
 	'error.network.generic':
 		'[{0}] Network request failed. Check your network connection, firewall, or proxy settings, and your custom baseUrl.',
-	'error.unknown': 'DeepSeek request failed: {0}',
+	'error.unknown': 'HF request failed: {0}',
 
 	// Extension
 	'extension.activateFailed': 'DeepSeek failed to activate. Run "DeepSeek: Show Logs" for details.',

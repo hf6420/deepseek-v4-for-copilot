@@ -4,17 +4,17 @@ import { safeStringify } from '../json';
 import { logger } from '../logger';
 import { getEndpointCompatibility, learnFromError, recordRequestSuccess } from '../provider/compat';
 import type {
-	DeepSeekRequest,
-	DeepSeekStreamChunk,
-	DeepSeekToolCall,
-	DeepSeekUsage,
-	StreamCallbacks,
+    DeepSeekRequest,
+    DeepSeekStreamChunk,
+    DeepSeekToolCall,
+    DeepSeekUsage,
+    StreamCallbacks,
 } from '../types';
 import {
-	createHttpError,
-	DeepSeekRequestError,
-	formatRequestError,
-	normalizeRequestError,
+    createHttpError,
+    DeepSeekRequestError,
+    formatRequestError,
+    normalizeRequestError,
 } from './error';
 
 const REQUEST_TIMEOUT_MS = 600_000;
@@ -115,12 +115,12 @@ export class DeepSeekClient {
 		if (!circuitBreakerAllows(this.baseUrl)) {
 			const error = new DeepSeekRequestError({
 				message: `Circuit breaker open for ${this.baseUrl} — too many consecutive failures`,
-				userSummary: `DeepSeek API is temporarily unavailable due to repeated failures. The extension will automatically retry after a short cooldown.`,
+				userSummary: `HF API is temporarily unavailable due to repeated failures. The extension will automatically retry after a short cooldown.`,
 				kind: 'network',
 				baseUrl: this.baseUrl,
 				code: 'CIRCUIT_OPEN',
 			});
-			logger.error('DeepSeek request blocked by circuit breaker:', error.message);
+			logger.error('HF request blocked by circuit breaker:', error.message);
 			callbacks.onError(error);
 			return;
 		}
@@ -161,7 +161,7 @@ export class DeepSeekClient {
 						request,
 					});
 					logger.error(
-						'DeepSeek request failed:',
+						'HF request failed:',
 						formatRequestError(normalizedError),
 					);
 					callbacks.onError(normalizedError);
@@ -265,7 +265,7 @@ export class DeepSeekClient {
 					}
 				}
 
-				throw await createHttpError(response, { baseUrl: this.baseUrl, request });
+				throw await createHttpError(response, { baseUrl: this.baseUrl, request: requestBody as unknown as import('../types').DeepSeekRequest });
 			}
 
 			// Should be unreachable — the loop always either returns, continues,
@@ -275,7 +275,7 @@ export class DeepSeekClient {
 			if (timedOut) {
 				throw new DeepSeekRequestError({
 					message: `Request timed out after ${REQUEST_TIMEOUT_MS / 1000}s for ${this.baseUrl}`,
-					userSummary: `DeepSeek API request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds. The model may be processing a large request. Please try again or reduce the input size.`,
+					userSummary: `HF API request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds. The model may be processing a large request. Please try again or reduce the input size.`,
 					kind: 'network',
 					baseUrl: this.baseUrl,
 					code: 'TIMEOUT',

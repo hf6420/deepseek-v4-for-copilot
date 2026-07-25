@@ -98,7 +98,7 @@ export function normalizeRequestError(error: unknown, context: RequestErrorConte
 	if (!(error instanceof Error)) {
 		const value = truncateSingleLine(String(error));
 		return new DeepSeekRequestError({
-			message: `DeepSeek request failed with a non-Error value: ${value}`,
+			message: `HF request failed with a non-Error value: ${value}`,
 			userSummary: t('error.unknown', value),
 			kind: 'unknown',
 			baseUrl: context.baseUrl,
@@ -119,8 +119,8 @@ export function normalizeRequestError(error: unknown, context: RequestErrorConte
 	const userSummary = getNetworkErrorMessage(code);
 	const enhanced = new DeepSeekRequestError({
 		message: code
-			? `DeepSeek request failed due to network error ${code}`
-			: 'DeepSeek request failed due to a network error',
+			? `HF request failed due to network error ${code}`
+			: 'HF request failed due to a network error',
 		userSummary,
 		kind: 'network',
 		baseUrl: context.baseUrl,
