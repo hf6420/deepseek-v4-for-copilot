@@ -1,5 +1,4 @@
 import vscode from 'vscode';
-import { getBaseUrl } from '../config';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type { DeepSeekMessage, DeepSeekTool, DeepSeekToolCall } from '../types';
@@ -10,12 +9,18 @@ import { parseFirstReplayMarker } from './replay';
  * Convert VS Code chat messages to DeepSeek format.
  * Injects marker-replayed reasoning_content for assistant messages
  * only when the endpoint supports it.
+ *
+ * @param baseUrl The actual endpoint URL being used for the request.
+ *   Must be passed explicitly — do NOT read from global config here,
+ *   otherwise per-model URL overrides will be ignored and the
+ *   reasoning_content injection decision will be wrong.
  */
 export function convertMessages(
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
 	isThinkingModel: boolean,
+	baseUrl: string,
 ): DeepSeekMessage[] {
-	const compat = getEndpointCompatibility(getBaseUrl());
+	const compat = getEndpointCompatibility(baseUrl);
 	const shouldInjectReasoning = isThinkingModel && compat.sendReasoningContent;
 	const result: DeepSeekMessage[] = [];
 

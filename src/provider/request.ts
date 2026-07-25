@@ -96,7 +96,7 @@ export async function prepareChatRequest({
 
 	const visionResolution = await resolveImageMessages(messages, token, getVisionDescriber);
 	const resolvedMessages = visionResolution.messages;
-	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel);
+	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel, resolvedBaseUrl);
 	const tools = prepareRequestTools(modelDef?.capabilities.toolCalling, options);
 
 	const compat = getEndpointCompatibility(resolvedBaseUrl);
