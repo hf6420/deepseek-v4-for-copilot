@@ -1,7 +1,7 @@
 import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { t } from '../i18n';
-import type { ModelDefinition } from '../types';
+import type { CompatMode, ModelDefinition } from '../types';
 import { DeepSeekChatProvider } from './index';
 import { toChatInfo } from './models';
 
@@ -19,6 +19,12 @@ interface VendorModelConfig {
 	requiresThinkingParam?: boolean;
 	extraBody?: Record<string, unknown>;
 	toolChoice?: boolean;
+	/** Per-model compat overrides. Takes priority over global `deepseek-copilot.compat.*` settings. */
+	compat?: {
+		thinkingParam?: import('../types').CompatMode;
+		streamOptions?: import('../types').CompatMode;
+		toolChoice?: import('../types').CompatMode;
+	};
 }
 
 /**
@@ -162,6 +168,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 						requiresThinkingParam: typeof m.requiresThinkingParam === 'boolean' ? m.requiresThinkingParam as boolean : undefined,
 						extraBody: typeof m.extraBody === 'object' && m.extraBody !== null && !Array.isArray(m.extraBody) ? m.extraBody as Record<string, unknown> : undefined,
 						toolChoice: typeof m.toolChoice === 'boolean' ? m.toolChoice as boolean : undefined,
+						compat: parseModelCompat(m.compat),
 					});
 				}
 			}
@@ -208,6 +215,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 			cfg?.apiKey?.trim() || undefined,
 			cfg?.extraBody,
 			cfg?.toolChoice,
+			cfg?.compat,
 		);
 	}
 
@@ -232,3 +240,29 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 	}
 }
 
+/**
+ * Parse per-model compat override from raw JSON config.
+ * Only accepts valid CompatMode values; ignores invalid entries.
+ */
+function parseModelCompat(raw: unknown): VendorModelConfig['compat'] {
+	if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+		return undefined;
+	}
+	const obj = raw as Record<string, unknown>;
+	const result: VendorModelConfig['compat'] = {};
+
+	const thinkingParam = obj.thinkingParam;
+	if (thinkingParam === 'auto' || thinkingParam === 'always' || thinkingParam === 'never') {
+		result.thinkingParam = thinkingParam as CompatMode;
+	}
+	const streamOptions = obj.streamOptions;
+	if (streamOptions === 'auto' || streamOptions === 'always' || streamOptions === 'never') {
+		result.streamOptions = streamOptions as CompatMode;
+	}
+	const toolChoice = obj.toolChoice;
+	if (toolChoice === 'auto' || toolChoice === 'always' || toolChoice === 'never') {
+		result.toolChoice = toolChoice as CompatMode;
+	}
+
+	return Object.keys(result).length > 0 ? result : undefined;
+}

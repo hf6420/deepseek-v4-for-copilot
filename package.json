@@ -74,8 +74,8 @@
                   "description": "Official DeepSeek API — uses vendor-level baseUrl",
                   "body": [
                     {
-                      "id": "model-id",
-                      "name": "model-name",
+                      "id": "modelId",
+                      "name": "modelName",
                       "detail": "Fast, general-purpose model · 1M context",
                       "maxInputTokens": 1000000,
                       "maxOutputTokens": 393216,
@@ -84,7 +84,8 @@
                       "thinking": true,
                       "requiresThinkingParam": true,
                       "toolChoice": true,
-                      "extraBody": {}
+                      "extraBody": {},
+                      "compat": {}
                     }
                   ]
                 }
@@ -156,6 +157,39 @@
                   "toolChoice": {
                     "type": "boolean",
                     "description": "Per-model override for sending `tool_choice: \"auto\"`. Takes priority over the global `deepseek-copilot.compat.toolChoice` setting. Set to false if this model's endpoint rejects tool_choice."
+                  },
+                  "compat": {
+                    "type": "object",
+                    "description": "Per-model compat overrides. Takes priority over global `deepseek-copilot.compat.*` settings. Use this to fine-tune behavior for third-party endpoints (e.g. enable thinking params for a non-DeepSeek API).",
+                    "properties": {
+                      "thinkingParam": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "always",
+                          "never"
+                        ],
+                        "description": "Controls sending of `thinking` / `reasoning_effort` params and `reasoning_content` injection. Set to \"always\" for third-party endpoints that support DeepSeek-style thinking."
+                      },
+                      "streamOptions": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "always",
+                          "never"
+                        ],
+                        "description": "Controls sending of `stream_options: { include_usage: true }`. Set to \"never\" if the endpoint rejects this field."
+                      },
+                      "toolChoice": {
+                        "type": "string",
+                        "enum": [
+                          "auto",
+                          "always",
+                          "never"
+                        ],
+                        "description": "Controls sending of `tool_choice: \"auto\"`. Set to \"never\" if the endpoint rejects tool_choice."
+                      }
+                    }
                   }
                 }
               }

@@ -13,13 +13,18 @@ import type { CompatMode, EndpointCompatibility } from '../types';
  *   are disabled. Use `extraBody` in model config to add custom fields.
  *
  * Users can force-enable/disable any feature via `deepseek-copilot.compat.*`.
+ * Per-model overrides (from `models[].compat`) take priority over the global
+ * setting, allowing different endpoints to have different compat behavior.
  */
-export function resolveEndpointCompatibility(baseUrl: string): EndpointCompatibility {
+export function resolveEndpointCompatibility(
+	baseUrl: string,
+	modelCompat?: { thinkingParam?: CompatMode; streamOptions?: CompatMode; toolChoice?: CompatMode },
+): EndpointCompatibility {
 	const isOfficial = isOfficialDeepSeekBaseUrl(baseUrl);
 
-	const thinkingMode = getThinkingParamMode();
-	const streamOptionsMode = getStreamOptionsMode();
-	const toolChoiceMode = getToolChoiceMode();
+	const thinkingMode = modelCompat?.thinkingParam ?? getThinkingParamMode();
+	const streamOptionsMode = modelCompat?.streamOptions ?? getStreamOptionsMode();
+	const toolChoiceMode = modelCompat?.toolChoice ?? getToolChoiceMode();
 	const temperature = getTemperature();
 	const topP = getTopP();
 
@@ -57,7 +62,11 @@ function resolveCompatMode(mode: CompatMode, isOfficial: boolean): boolean {
 /**
  * Get endpoint compatibility — stateless, no caching.
  * Users configure custom fields via `extraBody` in model config.
+ * Per-model overrides (from `models[].compat`) take priority over global settings.
  */
-export function getEndpointCompatibility(baseUrl: string): EndpointCompatibility {
-	return resolveEndpointCompatibility(baseUrl);
+export function getEndpointCompatibility(
+	baseUrl: string,
+	modelCompat?: { thinkingParam?: CompatMode; streamOptions?: CompatMode; toolChoice?: CompatMode },
+): EndpointCompatibility {
+	return resolveEndpointCompatibility(baseUrl, modelCompat);
 }

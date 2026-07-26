@@ -25,6 +25,10 @@ export interface PreparedChatRequest {
 	request: DeepSeekRequest;
 	/** Extra body fields merged into the API request body (from vendor model config). */
 	extraBody?: Record<string, unknown>;
+	/** Whether to send `stream_options: { include_usage: true }`. Pre-computed
+	 * from compat (including per-model overrides) so the client doesn't need
+	 * to re-resolve compat. */
+	sendStreamOptions: boolean;
 	isThinkingModel: boolean;
 	totalRequestChars: number;
 	trailingToolResultIds: string[];
@@ -51,6 +55,9 @@ export interface PrepareChatRequestOptions {
 	/** Per-model toolChoice override (from vendor config). Takes priority over the
 	 * global `deepseek-copilot.compat.toolChoice` setting. */
 	effectiveToolChoice?: boolean;
+	/** Per-model compat overrides (from `models[].compat`). Takes priority over
+	 * global `deepseek-copilot.compat.*` settings for this model's endpoint. */
+	effectiveModelCompat?: { thinkingParam?: import('../types').CompatMode; streamOptions?: import('../types').CompatMode; toolChoice?: import('../types').CompatMode };
 	segment: ConversationSegment;
 	messages: readonly vscode.LanguageModelChatRequestMessage[];
 	options: vscode.ProvideLanguageModelChatResponseOptions;
@@ -68,6 +75,7 @@ export async function prepareChatRequest({
 	effectiveApiKey,
 	effectiveExtraBody,
 	effectiveToolChoice,
+	effectiveModelCompat,
 	segment,
 	messages,
 	options,
@@ -96,10 +104,10 @@ export async function prepareChatRequest({
 
 	const visionResolution = await resolveImageMessages(messages, token, getVisionDescriber);
 	const resolvedMessages = visionResolution.messages;
-	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel, resolvedBaseUrl);
+	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel, resolvedBaseUrl, effectiveModelCompat);
 	const tools = prepareRequestTools(modelDef?.capabilities.toolCalling, options);
 
-	const compat = getEndpointCompatibility(resolvedBaseUrl);
+	const compat = getEndpointCompatibility(resolvedBaseUrl, effectiveModelCompat);
 	const totalRequestChars = countMessageChars(deepseekMessages);
 	const sendToolChoice = effectiveToolChoice ?? compat.sendToolChoice;
 	const baseRequest: DeepSeekRequest = {
@@ -172,6 +180,7 @@ export async function prepareChatRequest({
 		client,
 		request,
 		extraBody: effectiveExtraBody,
+		sendStreamOptions: compat.sendStreamOptions,
 		isThinkingModel,
 		totalRequestChars,
 		trailingToolResultIds: collectTrailingToolResultIds(deepseekMessages),

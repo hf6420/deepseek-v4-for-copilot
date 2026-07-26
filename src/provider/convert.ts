@@ -1,7 +1,7 @@
 import vscode from 'vscode';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
-import type { DeepSeekMessage, DeepSeekTool, DeepSeekToolCall } from '../types';
+import type { CompatMode, DeepSeekMessage, DeepSeekTool, DeepSeekToolCall } from '../types';
 import { getEndpointCompatibility } from './compat';
 import { parseFirstReplayMarker } from './replay';
 
@@ -14,13 +14,16 @@ import { parseFirstReplayMarker } from './replay';
  *   Must be passed explicitly — do NOT read from global config here,
  *   otherwise per-model URL overrides will be ignored and the
  *   reasoning_content injection decision will be wrong.
+ * @param modelCompat Optional per-model compat overrides (from `models[].compat`).
+ *   Takes priority over global `deepseek-copilot.compat.*` settings.
  */
 export function convertMessages(
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
 	isThinkingModel: boolean,
 	baseUrl: string,
+	modelCompat?: { thinkingParam?: CompatMode; streamOptions?: CompatMode; toolChoice?: CompatMode },
 ): DeepSeekMessage[] {
-	const compat = getEndpointCompatibility(baseUrl);
+	const compat = getEndpointCompatibility(baseUrl, modelCompat);
 	const shouldInjectReasoning = isThinkingModel && compat.sendReasoningContent;
 	const result: DeepSeekMessage[] = [];
 

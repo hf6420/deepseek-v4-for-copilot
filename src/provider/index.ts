@@ -184,6 +184,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 		effectiveApiKey?: string,
 		effectiveExtraBody?: Record<string, unknown>,
 		effectiveToolChoice?: boolean,
+		effectiveModelCompat?: { thinkingParam?: import('../types').CompatMode; streamOptions?: import('../types').CompatMode; toolChoice?: import('../types').CompatMode },
 	): Promise<void> {
 		const segment = resolveConversationSegment(messages);
 		const requestKind = classifyProviderRequest({
@@ -220,6 +221,7 @@ export class DeepSeekChatProvider implements vscode.LanguageModelChatProvider {
 			effectiveApiKey,
 			effectiveExtraBody,
 			effectiveToolChoice,
+			effectiveModelCompat,
 			segment,
 			messages: toolFlow.messages,
 			options,

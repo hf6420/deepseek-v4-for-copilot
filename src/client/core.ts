@@ -2,7 +2,6 @@ import type { CancellationToken } from 'vscode';
 import { normalizeBaseUrl } from '../endpoint';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
-import { getEndpointCompatibility } from '../provider/compat';
 import type {
 	DeepSeekRequest,
 	DeepSeekStreamChunk,
@@ -109,6 +108,7 @@ export class DeepSeekClient {
 		extraBody: Record<string, unknown> | undefined,
 		callbacks: StreamCallbacks,
 		cancellationToken?: CancellationToken,
+		sendStreamOptions?: boolean,
 	): Promise<void> {
 		// Circuit breaker: if this endpoint has too many consecutive failures,
 		// fail fast without hammering the API.
@@ -139,7 +139,7 @@ export class DeepSeekClient {
 			}
 
 			try {
-				await this._performStreamRequest(request, extraBody, callbacks, cancellationToken);
+				await this._performStreamRequest(request, extraBody, callbacks, cancellationToken, sendStreamOptions);
 				circuitBreakerRecordSuccess(this.baseUrl);
 				return;
 			} catch (error) {
@@ -186,6 +186,7 @@ export class DeepSeekClient {
 		extraBody: Record<string, unknown> | undefined,
 		callbacks: StreamCallbacks,
 		cancellationToken?: CancellationToken,
+		sendStreamOptions?: boolean,
 	): Promise<void> {
 		const controller = new AbortController();
 		const cancelListener = cancellationToken?.onCancellationRequested(() => {
@@ -225,7 +226,6 @@ export class DeepSeekClient {
 		}, REQUEST_TIMEOUT_MS);
 
 		try {
-			const compat = getEndpointCompatibility(this.baseUrl);
 			// Merge request fields first, then extraBody on top so user
 			// overrides always win. Strip model + messages from extraBody
 			// since those are set by the extension and must not be changed.
@@ -235,7 +235,7 @@ export class DeepSeekClient {
 				delete safeExtraBody.messages;
 			}
 			const requestBody: Record<string, unknown> = { ...request, ...safeExtraBody };
-			if (compat.sendStreamOptions && requestBody.stream !== false) {
+			if (sendStreamOptions && requestBody.stream !== false) {
 				requestBody.stream_options = { include_usage: true };
 			}
 

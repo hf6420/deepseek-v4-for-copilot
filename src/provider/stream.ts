@@ -100,6 +100,7 @@ export function streamChatCompletion({
 				},
 			},
 			token,
+			prepared.sendStreamOptions,
 		)
 		.then(undefined, (error) => {
 			reportSkippedReplayMarkerIfNeeded(
