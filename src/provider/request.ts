@@ -1,7 +1,7 @@
 import vscode from 'vscode';
 import { AuthManager } from '../auth';
 import { DeepSeekClient } from '../client';
-import { getApiModelId, getBaseUrl, getMaxTokens } from '../config';
+import { getApiModelId, getBaseUrl } from '../config';
 import { MODELS } from '../consts';
 import { t } from '../i18n';
 import type { DeepSeekRequest, ModelDefinition } from '../types';
@@ -100,7 +100,9 @@ export async function prepareChatRequest({
 
 	const isThinkingModel = modelDef?.capabilities.thinking ?? false;
 	const supportsVision = modelDef?.capabilities.imageInput ?? false;
-	const maxTokens = modelDef?.maxOutputTokens ?? getMaxTokens();
+	const maxTokens = (modelDef?.max_tokens && modelDef.max_tokens > 0)
+		? modelDef.max_tokens
+		: undefined;
 
 	const visionResolution = supportsVision
 		? await resolveImageMessages(messages, token, getVisionDescriber)

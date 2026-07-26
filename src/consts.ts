@@ -57,6 +57,7 @@ export const MODELS: ModelDefinition[] = [
 		detail: 'Fast, general-purpose model · 1M context',
 		maxInputTokens: 1000000,
 		maxOutputTokens: 393216,
+		max_tokens: 0,
 		capabilities: {
 			toolCalling: DEEPSEEK_TOOLS_LIMIT,
 			imageInput: true,
@@ -76,6 +77,7 @@ export const MODELS: ModelDefinition[] = [
 		detail: 'Most capable reasoning model · 1M context',
 		maxInputTokens: 1000000,
 		maxOutputTokens: 393216,
+		max_tokens: 0,
 		capabilities: {
 			toolCalling: DEEPSEEK_TOOLS_LIMIT,
 			imageInput: true,

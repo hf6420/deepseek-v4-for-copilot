@@ -13,6 +13,7 @@ interface VendorModelConfig {
 	apiKey?: string;
 	maxInputTokens?: number;
 	maxOutputTokens?: number;
+	max_tokens?: number;
 	toolCalling?: boolean;
 	vision?: boolean;
 	thinking?: boolean;
@@ -161,6 +162,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 						apiKey: typeof m.apiKey === 'string' ? m.apiKey as string : (configuredApiKey || undefined),
 						maxInputTokens: typeof m.maxInputTokens === 'number' ? m.maxInputTokens as number : undefined,
 						maxOutputTokens: typeof m.maxOutputTokens === 'number' ? m.maxOutputTokens as number : undefined,
+						max_tokens: typeof m.max_tokens === 'number' ? m.max_tokens as number : undefined,
 						toolCalling: typeof m.toolCalling === 'boolean' ? m.toolCalling as boolean : undefined,
 						vision: typeof m.vision === 'boolean' ? m.vision as boolean : undefined,
 						thinking: typeof m.thinking === 'boolean' ? m.thinking as boolean : undefined,
@@ -229,6 +231,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 			detail: c.detail ?? '',
 			maxInputTokens: c.maxInputTokens ?? 131072,
 			maxOutputTokens: c.maxOutputTokens ?? 16384,
+			max_tokens: c.max_tokens ?? 0,
 			capabilities: {
 				toolCalling: c.toolCalling ?? true,
 				imageInput: c.vision ?? false,

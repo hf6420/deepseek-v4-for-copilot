@@ -109,6 +109,8 @@ export interface ModelDefinition {
 	detail: string;
 	maxInputTokens: number;
 	maxOutputTokens: number;
+	/** API request max_tokens. When 0, falls back to maxOutputTokens. */
+	max_tokens: number;
 	capabilities: {
 		toolCalling: boolean | number;
 		imageInput: boolean;

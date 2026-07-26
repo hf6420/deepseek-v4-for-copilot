@@ -79,6 +79,7 @@
                       "detail": "Fast, general-purpose model · 1M context",
                       "maxInputTokens": 1000000,
                       "maxOutputTokens": 393216,
+                      "max_tokens": 0,
                       "toolCalling": true,
                       "vision": true,
                       "thinking": true,
@@ -124,12 +125,17 @@
                   "maxInputTokens": {
                     "type": "number",
                     "default": 131072,
-                    "description": "Maximum input tokens."
+                    "description": "Maximum input tokens (for display in the model picker)."
                   },
                   "maxOutputTokens": {
                     "type": "number",
                     "default": 16384,
-                    "description": "Maximum output tokens."
+                    "description": "Maximum output tokens (for display in the model picker)."
+                  },
+                  "max_tokens": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Max tokens sent in the API request. When 0 (default), falls back to maxOutputTokens."
                   },
                   "toolCalling": {
                     "type": "boolean",
