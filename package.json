@@ -135,7 +135,7 @@
                   "max_tokens": {
                     "type": "number",
                     "default": 0,
-                    "description": "Max tokens sent in the API request. When 0 (default), falls back to maxOutputTokens."
+                    "description": "Max tokens sent in the API request. When 0 (default), no limit is sent — the API uses its own default (393216 for DeepSeek V4). Set to a positive value to enforce an explicit output token cap. IMPORTANT: setting this too low may truncate reasoning_content and break prompt cache hit rate across conversation turns."
                   },
                   "toolCalling": {
                     "type": "boolean",
