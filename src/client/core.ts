@@ -4,20 +4,20 @@ import { safeStringify } from '../json';
 import { logger } from '../logger';
 import { getEndpointCompatibility } from '../provider/compat';
 import type {
-    DeepSeekRequest,
-    DeepSeekStreamChunk,
-    DeepSeekToolCall,
-    DeepSeekUsage,
-    StreamCallbacks,
+	DeepSeekRequest,
+	DeepSeekStreamChunk,
+	DeepSeekToolCall,
+	DeepSeekUsage,
+	StreamCallbacks,
 } from '../types';
 import {
-    createHttpError,
-    DeepSeekRequestError,
-    formatRequestError,
-    normalizeRequestError,
+	createHttpError,
+	DeepSeekRequestError,
+	formatRequestError,
+	normalizeRequestError,
 } from './error';
 
-const REQUEST_TIMEOUT_MS = 600_000;
+const REQUEST_TIMEOUT_MS = 180_000;
 const MAX_CONNECT_RETRIES = 3;
 const BASE_RETRY_DELAYS_MS = [1000, 2000, 4000];
 
@@ -195,6 +195,29 @@ export class DeepSeekClient {
 			controller.abort();
 		}
 
+		// Track whether any content/thinking/tool-call has been emitted to
+		// the caller. If a timeout fires mid-stream, retrying would duplicate
+		// already-displayed content — so we only allow retry when nothing
+		// has been emitted yet (i.e. timeout during connection / first byte).
+		let hasEmitted = false;
+		const guardedCallbacks: StreamCallbacks = {
+			onContent: (content: string) => {
+				hasEmitted = true;
+				callbacks.onContent(content);
+			},
+			onThinking: (text: string) => {
+				hasEmitted = true;
+				callbacks.onThinking(text);
+			},
+			onToolCall: (toolCall: DeepSeekToolCall) => {
+				hasEmitted = true;
+				callbacks.onToolCall(toolCall);
+			},
+			onError: callbacks.onError,
+			onDone: callbacks.onDone,
+			onUsage: callbacks.onUsage,
+		};
+
 		let timedOut = false;
 		const timeout = setTimeout(() => {
 			timedOut = true;
@@ -236,9 +259,9 @@ export class DeepSeekClient {
 			if (response.ok) {
 				circuitBreakerRecordSuccess(this.baseUrl);
 				if (requestBody.stream === false) {
-					return await this._processNonStreamResponse(response, callbacks);
+					return await this._processNonStreamResponse(response, guardedCallbacks);
 				}
-				return await this._processStreamResponse(response, callbacks, cancellationToken, controller);
+				return await this._processStreamResponse(response, guardedCallbacks, cancellationToken, controller);
 			}
 
 			throw await createHttpError(response, { baseUrl: this.baseUrl, request: requestBody as unknown as import('../types').DeepSeekRequest });
@@ -249,7 +272,10 @@ export class DeepSeekClient {
 					userSummary: `HF API request timed out after ${REQUEST_TIMEOUT_MS / 1000} seconds. The model may be processing a large request. Please try again or reduce the input size.`,
 					kind: 'network',
 					baseUrl: this.baseUrl,
-					code: 'TIMEOUT',
+					// Distinguish "clean timeout" (retryable) from
+					// "timeout after partial output" (not retryable — would
+					// duplicate already-emitted content).
+					code: hasEmitted ? 'TIMEOUT_AFTER_STREAM' : 'TIMEOUT',
 				});
 			}
 			throw error;
@@ -267,13 +293,20 @@ export class DeepSeekClient {
 		response: Response,
 		callbacks: StreamCallbacks,
 	): Promise<void> {
-		const data: unknown = await response.json();
-		if (!data || typeof data !== 'object') {
+		const raw: unknown = await response.json();
+		if (!raw || typeof raw !== 'object') {
 			callbacks.onDone();
 			return;
 		}
 
-		const obj = data as Record<string, unknown>;
+		// ── Nested response format ──
+		// Some providers wrap the response body in an outer envelope:
+		//   { data: { choices: [...] }, code: 0, msg: "ok" }
+		// Unwrap so the standard choices/message path works transparently.
+		const data = raw as Record<string, unknown>;
+		const obj = (data.data && !data.choices
+			? data.data
+			: data) as Record<string, unknown>;
 		const choice = (obj.choices as Array<Record<string, unknown>>)?.[0];
 		if (!choice) {
 			callbacks.onDone();
@@ -378,8 +411,32 @@ export class DeepSeekClient {
 					}
 
 					const jsonStr = trimmed.slice(6);
+
+					// ── Non-standard end-of-stream markers ──
+					// Some providers use bracketed tokens instead of [DONE].
+					// Treat them as graceful stream termination so JSON.parse
+					// doesn't throw on a non-JSON payload.
+					const upperJson = jsonStr.trim().toUpperCase();
+					if (upperJson === '[STOP]' || upperJson === '[END]' || upperJson === '[FINISH]') {
+						for (const tc of pendingToolCalls.values()) {
+							callbacks.onToolCall(tc);
+						}
+						pendingToolCalls.clear();
+						reportFinalUsage(callbacks, latestUsage);
+						callbacks.onDone();
+						return;
+					}
+
 					try {
-						const chunk: DeepSeekStreamChunk = JSON.parse(jsonStr);
+						const raw: Record<string, unknown> = JSON.parse(jsonStr);
+
+						// ── Nested response format ──
+						// Some providers wrap the SSE payload in an outer envelope:
+						//   { data: { choices: [...] }, code: 0, msg: "ok" }
+						// Unwrap so the standard choices/delta path works transparently.
+						const chunk = (raw.data && !raw.choices
+							? raw.data
+							: raw) as unknown as DeepSeekStreamChunk;
 						const choice = chunk.choices?.[0];
 
 						// Some OpenAI-compatible providers emit usage on every streaming chunk.
@@ -483,16 +540,22 @@ function isAbortError(error: unknown): boolean {
 
 /**
  * Determine whether a fetch error is retryable.
- * HTTP errors (wrapped in DeepSeekRequestError) and cancellations are NOT retryable.
- * Only transient network-level errors (connection refused, DNS failure, reset, timeout)
- * are retryable. Application-level errors (JSON parse, serialization, etc.) are not.
+ * HTTP errors and cancellations are NOT retryable.
+ * Timeout errors (DeepSeekRequestError with code=TIMEOUT) are retryable —
+ * the first timeout may be transient server-side queuing.
+ * Other transient network-level errors (connection refused, DNS failure,
+ * reset) are also retryable. Application-level errors (JSON parse,
+ * serialization, etc.) are not.
  */
 function isRetryableError(error: unknown): boolean {
 	if (isAbortError(error)) {
 		return false;
 	}
 	if (error instanceof DeepSeekRequestError) {
-		return false;
+		// Clean timeout (before any output) is retryable.
+		// TIMEOUT_AFTER_STREAM is NOT retryable — the caller already received
+		// partial content and retrying would duplicate it.
+		return error.code === 'TIMEOUT';
 	}
 	// Only retry transient network errors from fetch / Node.js internals.
 	// Non-network TypeErrors (e.g. JSON parse, safeStringify) must not be retried.
