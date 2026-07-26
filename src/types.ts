@@ -114,7 +114,6 @@ export interface ModelDefinition {
 		imageInput: boolean;
 		thinking: boolean;
 	};
-	requiresThinkingParam: boolean;
 	pricing?: Readonly<Record<PricingCurrency, ModelPricing>>;
 	priceCategory?: PriceCategory;
 }

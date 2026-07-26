@@ -16,7 +16,6 @@ interface VendorModelConfig {
 	toolCalling?: boolean;
 	vision?: boolean;
 	thinking?: boolean;
-	requiresThinkingParam?: boolean;
 	extraBody?: Record<string, unknown>;
 	toolChoice?: boolean;
 	/** Per-model compat overrides. Takes priority over global `deepseek-copilot.compat.*` settings. */
@@ -165,7 +164,7 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 						toolCalling: typeof m.toolCalling === 'boolean' ? m.toolCalling as boolean : undefined,
 						vision: typeof m.vision === 'boolean' ? m.vision as boolean : undefined,
 						thinking: typeof m.thinking === 'boolean' ? m.thinking as boolean : undefined,
-						requiresThinkingParam: typeof m.requiresThinkingParam === 'boolean' ? m.requiresThinkingParam as boolean : undefined,
+
 						extraBody: typeof m.extraBody === 'object' && m.extraBody !== null && !Array.isArray(m.extraBody) ? m.extraBody as Record<string, unknown> : undefined,
 						toolChoice: typeof m.toolChoice === 'boolean' ? m.toolChoice as boolean : undefined,
 						compat: parseModelCompat(m.compat),
@@ -235,7 +234,6 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 				imageInput: c.vision ?? false,
 				thinking: c.thinking ?? false,
 			},
-			requiresThinkingParam: c.requiresThinkingParam ?? false,
 		};
 	}
 }

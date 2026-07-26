@@ -99,9 +99,12 @@ export async function prepareChatRequest({
 		modelDefOverride ?? MODELS.find((m) => m.id === modelInfo.id);
 
 	const isThinkingModel = modelDef?.capabilities.thinking ?? false;
-	const maxTokens = getMaxTokens();
+	const supportsVision = modelDef?.capabilities.imageInput ?? false;
+	const maxTokens = modelDef?.maxOutputTokens ?? getMaxTokens();
 
-	const visionResolution = await resolveImageMessages(messages, token, getVisionDescriber);
+	const visionResolution = supportsVision
+		? await resolveImageMessages(messages, token, getVisionDescriber)
+		: { messages, replayMarkerMetadata: {}, stats: { inputImageParts: 0, inputImageMessages: 0, currentImageMessages: 0, generatedImageMessages: 0, replayedImageMessages: 0, omittedImageMessages: 0, unavailableImageMessages: 0, failedImageMessages: 0, droppedImageParts: 0, markerVisionTextChars: 0, invalidMarkerVisionMetadata: 0 } };
 	const resolvedMessages = visionResolution.messages;
 	const deepseekMessages = convertMessages(resolvedMessages, isThinkingModel, resolvedBaseUrl, effectiveModelCompat);
 	const tools = prepareRequestTools(modelDef?.capabilities.toolCalling, options);

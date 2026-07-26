@@ -82,7 +82,6 @@
                       "toolCalling": true,
                       "vision": true,
                       "thinking": true,
-                      "requiresThinkingParam": true,
                       "toolChoice": true,
                       "extraBody": {},
                       "compat": {
@@ -146,11 +145,6 @@
                     "type": "boolean",
                     "default": false,
                     "description": "Whether the model supports thinking/reasoning mode."
-                  },
-                  "requiresThinkingParam": {
-                    "type": "boolean",
-                    "default": false,
-                    "description": "Whether to send `thinking` / `reasoning_effort` params (DeepSeek-specific)."
                   },
                   "extraBody": {
                     "type": "object",
