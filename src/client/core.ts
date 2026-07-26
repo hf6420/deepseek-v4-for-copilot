@@ -3,17 +3,17 @@ import { normalizeBaseUrl } from '../endpoint';
 import { safeStringify } from '../json';
 import { logger } from '../logger';
 import type {
-	DeepSeekRequest,
-	DeepSeekStreamChunk,
-	DeepSeekToolCall,
-	DeepSeekUsage,
-	StreamCallbacks,
+    DeepSeekRequest,
+    DeepSeekStreamChunk,
+    DeepSeekToolCall,
+    DeepSeekUsage,
+    StreamCallbacks,
 } from '../types';
 import {
-	createHttpError,
-	DeepSeekRequestError,
-	formatRequestError,
-	normalizeRequestError,
+    createHttpError,
+    DeepSeekRequestError,
+    formatRequestError,
+    normalizeRequestError,
 } from './error';
 
 const REQUEST_TIMEOUT_MS = 180_000;
@@ -257,7 +257,6 @@ export class DeepSeekClient {
 			});
 
 			if (response.ok) {
-				circuitBreakerRecordSuccess(this.baseUrl);
 				if (requestBody.stream === false) {
 					return await this._processNonStreamResponse(response, guardedCallbacks);
 				}
