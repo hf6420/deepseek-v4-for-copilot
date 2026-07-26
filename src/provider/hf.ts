@@ -31,9 +31,6 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 	private readonly onDidChangeEmitter = new vscode.EventEmitter<void>();
 	private isActive = true;
 
-	/** Cache of vendor model configs keyed by model ID. */
-	private vendorConfigs = new Map<string, VendorModelConfig>();
-
 	readonly onDidChangeLanguageModelChatInformation = this.onDidChangeEmitter.event;
 
 	constructor(context: vscode.ExtensionContext) {
@@ -174,17 +171,21 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 		const hasAnyModelKey = configs.some((c) => c.apiKey?.trim());
 		const hasKey = hasGlobalKey || hasAnyModelKey;
 
-		// Build ModelDefinitions and merge into cache for request-time lookup.
-		// Never clear — each group contributes its own models.
-		const defs: ModelDefinition[] = [];
-		for (const c of configs) {
-			const def = this.toDefinition(c);
-			defs.push(def);
-			this.vendorConfigs.set(c.id, c);
-		}
-
+		// --- Attach each vendor config directly to the returned model info ---
+		// Previously a shared Map<string, VendorModelConfig> was used, but
+		// when multiple groups define the same model ID the last write wins,
+		// causing a model selected in group A to silently route through
+		// group B's URL / API key / extraBody.  Storing the config on the
+		// object itself guarantees that request-time lookup returns the
+		// exact config that was registered for *this* model – regardless of
+		// how many groups share the same ID.
 		const pricingCurrency = this.engine.getBalanceCurrency();
-		return defs.map((def) => toChatInfo(def, hasKey, pricingCurrency));
+		return configs.map((c) => {
+			const def = this.toDefinition(c);
+			const info = toChatInfo(def, hasKey, pricingCurrency);
+			(info as unknown as Record<string, unknown>).__vendorConfig = c;
+			return info;
+		});
 	}
 
 	async provideLanguageModelChatResponse(
@@ -194,8 +195,10 @@ export class HFChatProvider implements vscode.LanguageModelChatProvider {
 		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
 		token: vscode.CancellationToken,
 	): Promise<void> {
-		// Look up the vendor config to pass per-model URL / API key overrides.
-		const cfg = this.vendorConfigs.get(modelInfo.id);
+		// Read the vendor config that was attached during model listing.
+		// Using the object itself avoids cross-group collisions when
+		// multiple groups share the same model ID.
+		const cfg = (modelInfo as unknown as Record<string, unknown>).__vendorConfig as VendorModelConfig | undefined;
 		const modelDef = cfg ? this.toDefinition(cfg) : undefined;
 
 		return this.engine.provideLanguageModelChatResponseWithDef(
