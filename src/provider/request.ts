@@ -3,7 +3,6 @@ import { AuthManager } from '../auth';
 import { DeepSeekClient } from '../client';
 import { getApiModelId, getBaseUrl, getMaxTokens } from '../config';
 import { MODELS } from '../consts';
-import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import { t } from '../i18n';
 import type { DeepSeekRequest, ModelDefinition } from '../types';
 import { getEndpointCompatibility } from './compat';
@@ -127,10 +126,9 @@ export async function prepareChatRequest({
 	const configuredThinkingEffort = getConfiguredThinkingEffort(
 		options as ModelConfigurationOptions,
 	);
-	// Only force helper requests into disabled thinking on the official API.
-	// Custom endpoints keep their configured effort to preserve pre-#137 request shape.
-	const forceNoneThinking =
-		shouldForceThinkingNone(requestKind) && isOfficialDeepSeekBaseUrl(resolvedBaseUrl);
+	// Force helper requests (non-main-agent) into disabled thinking for
+	// all endpoints so simple queries skip the reasoning overhead.
+	const forceNoneThinking = shouldForceThinkingNone(requestKind);
 	const thinkingEffort = forceNoneThinking ? 'none' : configuredThinkingEffort;
 	const request: DeepSeekRequest = {
 		...baseRequest,

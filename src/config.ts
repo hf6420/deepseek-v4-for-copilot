@@ -159,7 +159,8 @@ function getScopedValue<T>(
 /**
  * Get user-configured thinking parameter mode.
  * Controls whether `thinking` / `reasoning_effort` are sent to the API.
- * Default: 'auto' (send to official DeepSeek API only).
+ * Default: 'auto' (disabled — only OpenAI-standard params sent).
+ * Set to 'always' to enable DeepSeek-specific fields on any endpoint.
  */
 export function getThinkingParamMode(): import('./types').CompatMode {
 	const config = vscode.workspace.getConfiguration(CONFIG_SECTION);

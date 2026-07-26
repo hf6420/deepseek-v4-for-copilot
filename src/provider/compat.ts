@@ -1,27 +1,24 @@
 import { getStreamOptionsMode, getTemperature, getThinkingParamMode, getToolChoiceMode, getTopP } from '../config';
-import { isOfficialDeepSeekBaseUrl } from '../endpoint';
 import type { CompatMode, EndpointCompatibility } from '../types';
 
 /**
- * Resolve endpoint compatibility settings by combining user-configuration
- * with endpoint-awareness (official DeepSeek vs third-party).
+ * Resolve endpoint compatibility settings purely from user configuration.
  *
- * ── Auto mode behavior ──
- * - Official DeepSeek (api.deepseek.com): all features enabled.
- * - Any other endpoint: only OpenAI-standard parameters are sent.
+ * ── Mode behavior ──
+ * - `auto` (default): only OpenAI-standard parameters are sent.
  *   DeepSeek-specific fields (thinking, reasoning_effort, reasoning_content)
- *   are disabled. Use `extraBody` in model config to add custom fields.
+ *   are disabled — safe for any OpenAI-compatible endpoint.
+ * - `always`: DeepSeek-specific fields are enabled. Use for endpoints that
+ *   support the full DeepSeek API surface.
+ * - `never`: feature is disabled regardless of other settings.
  *
- * Users can force-enable/disable any feature via `deepseek-copilot.compat.*`.
- * Per-model overrides (from `models[].compat`) take priority over the global
- * setting, allowing different endpoints to have different compat behavior.
+ * Disable/enable features via `deepseek-copilot.compat.*` globally
+ * or per-model via `models[].compat`.
  */
 export function resolveEndpointCompatibility(
 	baseUrl: string,
 	modelCompat?: { thinkingParam?: CompatMode; streamOptions?: CompatMode; toolChoice?: CompatMode },
 ): EndpointCompatibility {
-	const isOfficial = isOfficialDeepSeekBaseUrl(baseUrl);
-
 	const thinkingMode = modelCompat?.thinkingParam ?? getThinkingParamMode();
 	const streamOptionsMode = modelCompat?.streamOptions ?? getStreamOptionsMode();
 	const toolChoiceMode = modelCompat?.toolChoice ?? getToolChoiceMode();
@@ -29,12 +26,11 @@ export function resolveEndpointCompatibility(
 	const topP = getTopP();
 
 	// thinking / reasoning_effort / reasoning_content are DeepSeek-specific.
-	// Disabled for third-party endpoints to stay compatible with standard
-	// OpenAI-compatible APIs. Users who need them on a third-party endpoint
-	// can force-enable via `deepseek-copilot.compat.thinkingParam: always`.
-	const sendThinkingParam = resolveCompatMode(thinkingMode, isOfficial);
-	const sendReasoningEffort = resolveCompatMode(thinkingMode, isOfficial);
-	const sendReasoningContent = resolveCompatMode(thinkingMode, isOfficial);
+	// Disabled by default (auto = off). Enable explicitly via compat settings
+	// for endpoints that support the full DeepSeek API surface.
+	const sendThinkingParam = resolveCompatMode(thinkingMode);
+	const sendReasoningEffort = resolveCompatMode(thinkingMode);
+	const sendReasoningContent = resolveCompatMode(thinkingMode);
 
 	// stream_options is standard OpenAI (include_usage in SSE stream).
 	const sendStreamOptions = streamOptionsMode !== 'never';
@@ -51,12 +47,12 @@ export function resolveEndpointCompatibility(
 		sendToolChoice,
 		temperature: temperature > 0 ? temperature : undefined,
 		topP: topP > 0 ? topP : undefined,
-		providerName: isOfficial ? 'DeepSeek (Official)' : 'Third-Party',
+		providerName: 'DeepSeek Compatible',
 	};
 }
 
-function resolveCompatMode(mode: CompatMode, isOfficial: boolean): boolean {
-	return mode === 'always' || (mode === 'auto' && isOfficial);
+function resolveCompatMode(mode: CompatMode): boolean {
+	return mode === 'always';
 }
 
 /**

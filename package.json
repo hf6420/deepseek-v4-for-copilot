@@ -85,7 +85,9 @@
                       "requiresThinkingParam": true,
                       "toolChoice": true,
                       "extraBody": {},
-                      "compat": {}
+                      "compat": {
+                        "thinkingParam": "auto|always|never"
+                      }
                     }
                   ]
                 }
@@ -160,7 +162,7 @@
                   },
                   "compat": {
                     "type": "object",
-                    "description": "Per-model compat overrides. Takes priority over global `deepseek-copilot.compat.*` settings. Use this to fine-tune behavior for third-party endpoints (e.g. enable thinking params for a non-DeepSeek API).",
+                    "description": "Per-model compat overrides. Takes priority over global `deepseek-copilot.compat.*` settings. Set thinkingParam to \"always\" for endpoints that support DeepSeek-style thinking; set to \"never\" to disable.",
                     "properties": {
                       "thinkingParam": {
                         "type": "string",
@@ -169,7 +171,7 @@
                           "always",
                           "never"
                         ],
-                        "description": "Controls sending of `thinking` / `reasoning_effort` params and `reasoning_content` injection. Set to \"always\" for third-party endpoints that support DeepSeek-style thinking."
+                        "description": "Controls sending of `thinking` / `reasoning_effort` params and `reasoning_content` injection. Default \"auto\" disables these fields for safe compat. Set to \"always\" for endpoints that support DeepSeek-style thinking."
                       },
                       "streamOptions": {
                         "type": "string",
